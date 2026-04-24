@@ -5,7 +5,11 @@ mod store;
 mod types;
 
 use parking_lot::RwLock;
-use tauri::Manager;
+use tauri::{
+    menu::{Menu, MenuItem},
+    tray::TrayIconBuilder,
+    Manager,
+};
 use tauri_plugin_global_shortcut::GlobalShortcutExt;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -14,15 +18,49 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+        .plugin(tauri_plugin_autostart::init(
+            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            None,
+        ))
         .setup(|app| {
+            // On macOS, run as an accessory app — no dock icon, menu bar only.
+            #[cfg(target_os = "macos")]
+            {
+                app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+            }
+
+            // Load the store.
             let store = store::Store::load().expect("failed to load davidcast store");
             app.manage(RwLock::new(store));
 
+            // Register global hotkey.
             let handle = app.handle().clone();
             let shortcut = hotkey::default_shortcut();
             app.global_shortcut().on_shortcut(shortcut, move |_app, sc, event| {
                 hotkey::on_shortcut(&handle, sc, event.state);
             })?;
+
+            // Build the menu-bar tray.
+            let show_i = MenuItem::with_id(app, "show", "Open davidcast", true, Some("Alt+Space"))?;
+            let sep_i = tauri::menu::PredefinedMenuItem::separator(app)?;
+            let quit_i = MenuItem::with_id(app, "quit", "Quit davidcast", true, Some("Cmd+Q"))?;
+            let menu = Menu::with_items(app, &[&show_i, &sep_i, &quit_i])?;
+
+            let _tray = TrayIconBuilder::with_id("main-tray")
+                .icon(
+                    app.default_window_icon()
+                        .cloned()
+                        .expect("default window icon missing"),
+                )
+                .icon_as_template(true)
+                .menu(&menu)
+                .show_menu_on_left_click(true)
+                .on_menu_event(|app, event| match event.id.as_ref() {
+                    "show" => hotkey::toggle_palette(app),
+                    "quit" => app.exit(0),
+                    _ => {}
+                })
+                .build(app)?;
 
             Ok(())
         })

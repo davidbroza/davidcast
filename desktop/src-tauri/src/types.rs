@@ -76,11 +76,3 @@ pub enum Item {
     Quicklink(Quicklink),
 }
 
-impl Item {
-    pub fn id(&self) -> &str {
-        match self {
-            Item::Snippet(s) => &s.id,
-            Item::Quicklink(q) => &q.id,
-        }
-    }
-}

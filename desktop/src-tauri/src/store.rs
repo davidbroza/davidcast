@@ -96,6 +96,4 @@ pub enum StoreError {
     Json(#[from] serde_json::Error),
     #[error("no data directory")]
     NoDataDir,
-    #[error("not found")]
-    NotFound,
 }
