@@ -32,6 +32,7 @@ export function Palette({
 }: Props) {
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState(0);
+  const [toast, setToast] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
@@ -81,7 +82,14 @@ export function Palette({
       } else if (isApp(entry)) {
         await api.executeApp(entry.path);
       } else if (isSnippet(entry)) {
+        // Copy immediately, show toast, then hide+paste after a beat so the
+        // confirmation is visible before focus returns to the prior app.
         await api.executeSnippet(entry.id);
+        setToast("Copied to clipboard");
+        window.setTimeout(() => {
+          setToast(null);
+          api.hideAndPaste().catch(() => {});
+        }, 1100);
       } else if (isQuicklink(entry)) {
         const placeholders = extractPlaceholders(entry.url);
         const args: Record<string, string> = {};
@@ -246,6 +254,8 @@ export function Palette({
         <span><kbd>⌘K</kbd>Workspace</span>
         <span><kbd>esc</kbd>Close</span>
       </div>
+
+      {toast && <div className="toast">✓ {toast}</div>}
     </div>
   );
 }

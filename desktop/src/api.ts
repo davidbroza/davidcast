@@ -58,6 +58,7 @@ export const api = {
 
   // Window
   hidePalette: () => invoke<void>("hide_palette"),
+  hideAndPaste: () => invoke<void>("hide_and_paste"),
 
   // Import
   importFromFile: (path: string) =>

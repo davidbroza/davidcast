@@ -398,6 +398,12 @@ pub fn hide_palette(app: AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+#[tauri::command]
+pub fn hide_and_paste(app: AppHandle) -> Result<(), String> {
+    actions::hide_and_paste(&app);
+    Ok(())
+}
+
 // ---------- Import ----------
 
 #[derive(serde::Serialize)]

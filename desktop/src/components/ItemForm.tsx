@@ -1,10 +1,11 @@
+import { readText } from "@tauri-apps/plugin-clipboard-manager";
 import { useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import type { Item, OpenIn } from "../types";
 import { isQuicklink, isSnippet } from "../types";
 
 type Props = {
-  initial?: Item; // undefined = create mode
+  initial?: Item;
   presetKind?: "snippet" | "quicklink";
   onDone: () => void;
   onCancel: () => void;
@@ -20,8 +21,12 @@ export function ItemForm({ initial, presetKind, onDone, onCancel, onError }: Pro
   );
   const [name, setName] = useState(initial?.name ?? "");
   const [keyword, setKeyword] = useState(initial?.keyword ?? "");
-  const [text, setText] = useState(initial && isSnippet(initial) ? initial.text : "");
-  const [url, setUrl] = useState(initial && isQuicklink(initial) ? initial.url : "");
+  const [text, setText] = useState(
+    initial && isSnippet(initial) ? initial.text : ""
+  );
+  const [url, setUrl] = useState(
+    initial && isQuicklink(initial) ? initial.url : ""
+  );
   const [openIn, setOpenIn] = useState<OpenIn>(
     initial && isQuicklink(initial) ? initial.open_in : "default_browser"
   );
@@ -31,6 +36,23 @@ export function ItemForm({ initial, presetKind, onDone, onCancel, onError }: Pro
   useEffect(() => {
     nameRef.current?.focus();
   }, []);
+
+  // Pre-fill the value field from the clipboard on create (never overwrite).
+  useEffect(() => {
+    if (editing) return;
+    readText()
+      .then((content) => {
+        if (!content) return;
+        if (kind === "snippet") {
+          setText((t) => (t ? t : content));
+        } else if (kind === "quicklink") {
+          setUrl((u) => (u ? u : looksLikeUrl(content) ? content : u));
+        }
+      })
+      .catch(() => {
+        /* clipboard empty or unavailable — ignore */
+      });
+  }, [editing, kind]);
 
   async function save() {
     if (saving) return;
@@ -72,7 +94,12 @@ export function ItemForm({ initial, presetKind, onDone, onCancel, onError }: Pro
             open_in: openIn,
           });
         } else {
-          await api.createQuicklink({ name, url, keyword: kw, open_in: openIn });
+          await api.createQuicklink({
+            name,
+            url,
+            keyword: kw,
+            open_in: openIn,
+          });
         }
       }
       onDone();
@@ -104,6 +131,7 @@ export function ItemForm({ initial, presetKind, onDone, onCancel, onError }: Pro
                 className={kind === "snippet" ? "active" : ""}
                 onClick={() => setKind("snippet")}
                 type="button"
+                tabIndex={-1}
               >
                 Snippet
               </button>
@@ -111,6 +139,7 @@ export function ItemForm({ initial, presetKind, onDone, onCancel, onError }: Pro
                 className={kind === "quicklink" ? "active" : ""}
                 onClick={() => setKind("quicklink")}
                 type="button"
+                tabIndex={-1}
               >
                 Quicklink
               </button>
@@ -128,22 +157,14 @@ export function ItemForm({ initial, presetKind, onDone, onCancel, onError }: Pro
               placeholder="e.g. Email signature"
             />
           </div>
-          <div className="form-field">
-            <label>Keyword (optional)</label>
-            <input
-              value={keyword}
-              onChange={(e) => setKeyword(e.target.value)}
-              placeholder="e.g. sig"
-              spellCheck={false}
-            />
-          </div>
+
           {kind === "snippet" ? (
             <div className="form-field">
               <label>Text</label>
               <textarea
                 value={text}
                 onChange={(e) => setText(e.target.value)}
-                placeholder="Paste content..."
+                placeholder="Paste content…"
               />
             </div>
           ) : (
@@ -170,15 +191,29 @@ export function ItemForm({ initial, presetKind, onDone, onCancel, onError }: Pro
               </div>
             </>
           )}
+
+          <div className="form-field">
+            <label>Keyword (optional)</label>
+            <input
+              value={keyword}
+              onChange={(e) => setKeyword(e.target.value)}
+              placeholder="e.g. sig"
+              spellCheck={false}
+            />
+          </div>
         </div>
 
         <div className="footer">
           <span><kbd>⌘↵</kbd>Save</span>
           <span><kbd>esc</kbd>Cancel</span>
           <div className="footer-spacer" />
-          {saving && <span>Saving...</span>}
+          {saving && <span>Saving…</span>}
         </div>
       </div>
     </div>
   );
+}
+
+function looksLikeUrl(s: string): boolean {
+  return /^https?:\/\//i.test(s) || /^www\./i.test(s);
 }

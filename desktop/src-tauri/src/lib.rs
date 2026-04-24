@@ -106,6 +106,7 @@ pub fn run() {
             commands::execute_snippet,
             commands::execute_quicklink,
             commands::hide_palette,
+            commands::hide_and_paste,
             commands::show_preferences,
             commands::import_from_file,
         ])
