@@ -308,3 +308,26 @@ pub fn hide_palette(app: AppHandle) -> Result<(), String> {
     }
     Ok(())
 }
+
+#[tauri::command]
+pub fn show_preferences(app: AppHandle) -> Result<(), String> {
+    use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
+    if let Some(w) = app.get_webview_window("prefs") {
+        w.show().map_err(|e| e.to_string())?;
+        w.set_focus().map_err(|e| e.to_string())?;
+        return Ok(());
+    }
+    WebviewWindowBuilder::new(
+        &app,
+        "prefs",
+        WebviewUrl::App("index.html?view=prefs".into()),
+    )
+    .title("davidcast — Preferences")
+    .inner_size(640.0, 520.0)
+    .resizable(true)
+    .center()
+    .focused(true)
+    .build()
+    .map_err(|e| e.to_string())?;
+    Ok(())
+}

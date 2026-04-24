@@ -42,9 +42,10 @@ pub fn run() {
 
             // Build the menu-bar tray.
             let show_i = MenuItem::with_id(app, "show", "Open davidcast", true, Some("Alt+Space"))?;
+            let prefs_i = MenuItem::with_id(app, "prefs", "Preferences…", true, Some("Cmd+,"))?;
             let sep_i = tauri::menu::PredefinedMenuItem::separator(app)?;
             let quit_i = MenuItem::with_id(app, "quit", "Quit davidcast", true, Some("Cmd+Q"))?;
-            let menu = Menu::with_items(app, &[&show_i, &sep_i, &quit_i])?;
+            let menu = Menu::with_items(app, &[&show_i, &prefs_i, &sep_i, &quit_i])?;
 
             let _tray = TrayIconBuilder::with_id("main-tray")
                 .icon(
@@ -57,6 +58,11 @@ pub fn run() {
                 .show_menu_on_left_click(true)
                 .on_menu_event(|app, event| match event.id.as_ref() {
                     "show" => hotkey::toggle_palette(app),
+                    "prefs" => {
+                        if let Err(e) = commands::show_preferences(app.clone()) {
+                            eprintln!("failed to open preferences: {e}");
+                        }
+                    }
                     "quit" => app.exit(0),
                     _ => {}
                 })
@@ -86,6 +92,7 @@ pub fn run() {
             commands::execute_snippet,
             commands::execute_quicklink,
             commands::hide_palette,
+            commands::show_preferences,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

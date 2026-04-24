@@ -5,7 +5,6 @@ import { Palette } from "./components/Palette";
 import { WorkspaceSwitcher } from "./components/WorkspaceSwitcher";
 import { api } from "./api";
 import type { Item, Workspace } from "./types";
-import "./palette.css";
 
 type View =
   | { kind: "palette" }
