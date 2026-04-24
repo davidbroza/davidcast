@@ -41,7 +41,7 @@ pub fn run() {
             })?;
 
             // Build the menu-bar tray.
-            let show_i = MenuItem::with_id(app, "show", "Open davidcast", true, Some("Alt+Space"))?;
+            let show_i = MenuItem::with_id(app, "show", "Open davidcast", true, Some("Ctrl+Space"))?;
             let prefs_i = MenuItem::with_id(app, "prefs", "Preferences…", true, Some("Cmd+,"))?;
             let sep_i = tauri::menu::PredefinedMenuItem::separator(app)?;
             let quit_i = MenuItem::with_id(app, "quit", "Quit davidcast", true, Some("Cmd+Q"))?;

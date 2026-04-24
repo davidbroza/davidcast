@@ -7,7 +7,7 @@ See [`PLAN.md`](./PLAN.md) for the full design.
 ## Status
 
 **Phase 1 — macOS desktop app (shipped):**
-- Global hotkey palette (`⌥ Space`)
+- Global hotkey palette (`⌃ Space`)
 - Snippets (copy + paste at cursor via macOS Accessibility)
 - Quicklinks with `{placeholder}` argument substitution; opens in default browser, Chrome, or Safari
 - Workspaces (switch with `⌘K`, manage in Preferences)
@@ -39,7 +39,7 @@ pnpm install
 pnpm tauri dev
 ```
 
-First compile takes a couple of minutes; subsequent runs are fast. A tray icon appears in the menu bar — click it, or press `⌥ Space` from anywhere.
+First compile takes a couple of minutes; subsequent runs are fast. A tray icon appears in the menu bar — click it, or press `⌃ Space` from anywhere.
 
 ## Building a release app
 
@@ -58,7 +58,7 @@ To paste snippets at the cursor, davidcast needs **Accessibility** permission.
 2. Open **System Settings → Privacy & Security → Accessibility**.
 3. Enable `davidcast` (during dev, whichever terminal launched `pnpm tauri dev`).
 
-The hotkey is `⌥ Space`. If Raycast is installed with the same binding, rebind one of them.
+The hotkey is `⌃ Space`. If Raycast is installed with the same binding, rebind one of them.
 
 ## Keybindings
 

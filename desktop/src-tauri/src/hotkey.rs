@@ -2,7 +2,7 @@ use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_global_shortcut::{Code, Modifiers, Shortcut, ShortcutState};
 
 pub fn default_shortcut() -> Shortcut {
-    Shortcut::new(Some(Modifiers::ALT), Code::Space)
+    Shortcut::new(Some(Modifiers::CONTROL), Code::Space)
 }
 
 pub fn on_shortcut(app: &AppHandle, _shortcut: &Shortcut, state: ShortcutState) {

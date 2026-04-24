@@ -94,7 +94,7 @@ export function Preferences() {
           <div className="label">
             <div className="label-title">Global hotkey</div>
             <div className="label-sub">
-              Press <kbd>⌥ Space</kbd> anywhere to toggle the palette. Rebinding
+              Press <kbd>⌃ Space</kbd> anywhere to toggle the palette. Rebinding
               lands in a later release.
             </div>
           </div>
