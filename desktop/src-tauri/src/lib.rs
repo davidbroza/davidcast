@@ -7,7 +7,7 @@ mod types;
 use parking_lot::RwLock;
 use tauri::{
     menu::{Menu, MenuItem},
-    tray::TrayIconBuilder,
+    tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     Manager,
 };
 use tauri_plugin_global_shortcut::GlobalShortcutExt;
@@ -55,7 +55,18 @@ pub fn run() {
                 )
                 .icon_as_template(true)
                 .menu(&menu)
-                .show_menu_on_left_click(true)
+                // Left-click opens the palette; the menu surfaces on right-click.
+                .show_menu_on_left_click(false)
+                .on_tray_icon_event(|tray, event| {
+                    if let TrayIconEvent::Click {
+                        button: MouseButton::Left,
+                        button_state: MouseButtonState::Up,
+                        ..
+                    } = event
+                    {
+                        hotkey::toggle_palette(tray.app_handle());
+                    }
+                })
                 .on_menu_event(|app, event| match event.id.as_ref() {
                     "show" => hotkey::toggle_palette(app),
                     "prefs" => {
