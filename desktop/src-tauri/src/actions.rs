@@ -4,13 +4,18 @@ use tauri::{AppHandle, Manager};
 
 pub fn execute_snippet(app: &AppHandle, s: &Snippet) -> Result<(), String> {
     use tauri_plugin_clipboard_manager::ClipboardExt;
+    // Copying to the clipboard is the primary action — must succeed.
     app.clipboard()
         .write_text(s.text.clone())
         .map_err(|e| format!("clipboard: {e}"))?;
     hide_palette(app);
-    // Give the previous frontmost app a moment to regain focus before pasting.
+    // Best-effort paste: if Accessibility permission is missing, the text
+    // is still on the clipboard and the user can ⌘V manually.
     std::thread::sleep(std::time::Duration::from_millis(120));
-    paste_at_cursor()
+    if let Err(e) = paste_at_cursor() {
+        eprintln!("paste skipped: {e}");
+    }
+    Ok(())
 }
 
 pub fn execute_quicklink(

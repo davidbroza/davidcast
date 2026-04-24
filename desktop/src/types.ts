@@ -34,23 +34,49 @@ export interface WorkspaceList {
   active: string;
 }
 
+export interface AppEntry {
+  name: string;
+  path: string;
+}
+
+export interface CommandEntry {
+  id: string;
+  name: string;
+  subtitle: string;
+}
+
 export type Item =
   | ({ kind: "snippet" } & Snippet)
   | ({ kind: "quicklink" } & Quicklink);
 
-export function itemKeyword(i: Item): string | undefined {
-  return i.keyword;
-}
+export type PaletteEntry =
+  | ({ kind: "command" } & CommandEntry)
+  | ({ kind: "snippet" } & Snippet)
+  | ({ kind: "quicklink" } & Quicklink)
+  | ({ kind: "app" } & AppEntry);
 
-export function isSnippet(i: Item): i is { kind: "snippet" } & Snippet {
+export function isSnippet(i: Item | PaletteEntry): i is { kind: "snippet" } & Snippet {
   return i.kind === "snippet";
 }
 
-export function isQuicklink(i: Item): i is { kind: "quicklink" } & Quicklink {
+export function isQuicklink(i: Item | PaletteEntry): i is { kind: "quicklink" } & Quicklink {
   return i.kind === "quicklink";
 }
 
-// Extract `{placeholder}` names from a URL template.
+export function isApp(i: PaletteEntry): i is { kind: "app" } & AppEntry {
+  return i.kind === "app";
+}
+
+export function isCommand(i: PaletteEntry): i is { kind: "command" } & CommandEntry {
+  return i.kind === "command";
+}
+
+export function asItem(e: PaletteEntry): Item | null {
+  if (e.kind === "snippet") return { ...e };
+  if (e.kind === "quicklink") return { ...e };
+  return null;
+}
+
 export function extractPlaceholders(url: string): string[] {
   const out: string[] = [];
   const re = /\{([^}]+)\}/g;

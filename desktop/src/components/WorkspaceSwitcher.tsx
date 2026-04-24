@@ -65,13 +65,14 @@ export function WorkspaceSwitcher({
       }
       return;
     }
+    const ctrlOnly = e.ctrlKey && !e.metaKey && !e.altKey;
     if (e.key === "Escape") {
       e.preventDefault();
       onClose();
-    } else if (e.key === "ArrowDown") {
+    } else if (e.key === "ArrowDown" || (ctrlOnly && (e.key === "n" || e.key === "j"))) {
       e.preventDefault();
       setSelected((s) => Math.min(workspaces.length - 1, s + 1));
-    } else if (e.key === "ArrowUp") {
+    } else if (e.key === "ArrowUp" || (ctrlOnly && (e.key === "p" || e.key === "k"))) {
       e.preventDefault();
       setSelected((s) => Math.max(0, s - 1));
     } else if (e.key === "Enter") {

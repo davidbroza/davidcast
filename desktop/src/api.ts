@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type {
   Item,
   OpenIn,
+  PaletteEntry,
   Quicklink,
   Snippet,
   Workspace,
@@ -19,6 +20,9 @@ export const api = {
 
   // Items
   listItems: () => invoke<Item[]>("list_items"),
+  listPalette: () => invoke<PaletteEntry[]>("list_palette"),
+  executeApp: (path: string) => invoke<void>("execute_app", { path }),
+  showPreferences: () => invoke<void>("show_preferences"),
 
   // Snippets
   createSnippet: (input: { name: string; text: string; keyword?: string }) =>

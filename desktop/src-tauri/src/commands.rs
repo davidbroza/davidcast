@@ -1,4 +1,5 @@
 use crate::actions;
+use crate::apps::{self, AppEntry};
 use crate::store::Store;
 use crate::types::*;
 use chrono::Utc;
@@ -124,6 +125,94 @@ pub fn list_items(store: StoreState<'_>) -> Result<Vec<Item>, String> {
         items.push(Item::Quicklink(x));
     }
     Ok(items)
+}
+
+// ---------- Palette ----------
+//
+// The palette mixes four sources into one searchable list:
+//   - built-in commands ("Create Snippet", "Preferences", ...)
+//   - user snippets
+//   - user quicklinks
+//   - installed macOS apps
+
+#[derive(serde::Serialize, Clone)]
+pub struct CommandEntry {
+    pub id: String,
+    pub name: String,
+    pub subtitle: String,
+}
+
+#[derive(serde::Serialize)]
+#[serde(tag = "kind", rename_all = "lowercase")]
+pub enum PaletteEntry {
+    Command(CommandEntry),
+    Snippet(Snippet),
+    Quicklink(Quicklink),
+    App(AppEntry),
+}
+
+fn builtin_commands() -> Vec<CommandEntry> {
+    vec![
+        CommandEntry {
+            id: "create.snippet".into(),
+            name: "Create Snippet".into(),
+            subtitle: "New snippet in this workspace".into(),
+        },
+        CommandEntry {
+            id: "create.quicklink".into(),
+            name: "Create Quicklink".into(),
+            subtitle: "New quicklink in this workspace".into(),
+        },
+        CommandEntry {
+            id: "open.preferences".into(),
+            name: "Open Preferences".into(),
+            subtitle: "Autostart, workspaces, import".into(),
+        },
+        CommandEntry {
+            id: "switch.workspace".into(),
+            name: "Switch Workspace".into(),
+            subtitle: "Change the active workspace".into(),
+        },
+    ]
+}
+
+#[tauri::command]
+pub fn list_palette(store: StoreState<'_>) -> Result<Vec<PaletteEntry>, String> {
+    let s = store.read();
+    let snippets = s.load_snippets().map_err(|e| e.to_string())?;
+    let quicklinks = s.load_quicklinks().map_err(|e| e.to_string())?;
+    drop(s);
+    let apps_list = apps::list_apps();
+
+    let mut out = Vec::with_capacity(
+        4 + snippets.len() + quicklinks.len() + apps_list.len(),
+    );
+    for c in builtin_commands() {
+        out.push(PaletteEntry::Command(c));
+    }
+    for x in snippets.into_iter().filter(|x| !x.deleted) {
+        out.push(PaletteEntry::Snippet(x));
+    }
+    for x in quicklinks.into_iter().filter(|x| !x.deleted) {
+        out.push(PaletteEntry::Quicklink(x));
+    }
+    for a in apps_list {
+        out.push(PaletteEntry::App(a));
+    }
+    Ok(out)
+}
+
+#[tauri::command]
+pub fn execute_app(path: String, app: AppHandle) -> Result<(), String> {
+    use tauri::Manager;
+    if let Some(w) = app.get_webview_window("main") {
+        let _ = w.hide();
+    }
+    std::process::Command::new("open")
+        .arg(&path)
+        .status()
+        .map_err(|e| format!("open {path} failed: {e}"))?;
+    Ok(())
 }
 
 // ---------- Snippet CRUD ----------

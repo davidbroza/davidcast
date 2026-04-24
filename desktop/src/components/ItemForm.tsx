@@ -5,6 +5,7 @@ import { isQuicklink, isSnippet } from "../types";
 
 type Props = {
   initial?: Item; // undefined = create mode
+  presetKind?: "snippet" | "quicklink";
   onDone: () => void;
   onCancel: () => void;
   onError: (msg: string) => void;
@@ -12,10 +13,10 @@ type Props = {
 
 type Kind = "snippet" | "quicklink";
 
-export function ItemForm({ initial, onDone, onCancel, onError }: Props) {
+export function ItemForm({ initial, presetKind, onDone, onCancel, onError }: Props) {
   const editing = !!initial;
   const [kind, setKind] = useState<Kind>(
-    initial ? (initial.kind as Kind) : "snippet"
+    initial ? (initial.kind as Kind) : (presetKind ?? "snippet")
   );
   const [name, setName] = useState(initial?.name ?? "");
   const [keyword, setKeyword] = useState(initial?.keyword ?? "");

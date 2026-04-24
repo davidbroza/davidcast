@@ -173,6 +173,26 @@ html, body, #root {
 .row-icon.quicklink {
   background: var(--badge-quicklink);
 }
+.row-icon.app {
+  background: linear-gradient(135deg, #4a4a56, #35353f);
+  color: #e8e8ea;
+  font-weight: 500;
+}
+.row-icon.command {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--accent);
+  font-size: 13px;
+}
+
+.kind-badge {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--fg-faint);
+  padding: 1px 6px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+}
 
 .row-main {
   flex: 1;

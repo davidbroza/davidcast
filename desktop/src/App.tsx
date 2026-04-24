@@ -1,36 +1,38 @@
 import { listen } from "@tauri-apps/api/event";
 import { useCallback, useEffect, useState } from "react";
+import { api } from "./api";
 import { ItemForm } from "./components/ItemForm";
 import { Palette } from "./components/Palette";
 import { WorkspaceSwitcher } from "./components/WorkspaceSwitcher";
-import { api } from "./api";
-import type { Item, Workspace } from "./types";
+import type { Item, PaletteEntry, Workspace } from "./types";
 
 type View =
   | { kind: "palette" }
-  | { kind: "create" }
+  | { kind: "create"; presetKind: "snippet" | "quicklink" }
   | { kind: "edit"; item: Item }
   | { kind: "workspace-switcher" };
 
 export default function App() {
-  const [items, setItems] = useState<Item[]>([]);
+  const [entries, setEntries] = useState<PaletteEntry[]>([]);
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [activeWorkspace, setActiveWorkspace] = useState<string>("");
   const [view, setView] = useState<View>({ kind: "palette" });
   const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
-    const [ws, its] = await Promise.all([api.listWorkspaces(), api.listItems()]);
+    const [ws, list] = await Promise.all([
+      api.listWorkspaces(),
+      api.listPalette(),
+    ]);
     setWorkspaces(ws.workspaces);
     setActiveWorkspace(ws.active);
-    setItems(its);
+    setEntries(list);
   }, []);
 
   useEffect(() => {
     refresh().catch((e) => setError(String(e)));
   }, [refresh]);
 
-  // When the palette is re-shown via hotkey, reset to base view and refetch.
   useEffect(() => {
     const off = listen("palette:show", () => {
       setView({ kind: "palette" });
@@ -44,10 +46,33 @@ export default function App() {
 
   const backToPalette = () => setView({ kind: "palette" });
 
+  async function onCommand(id: string) {
+    switch (id) {
+      case "create.snippet":
+        setView({ kind: "create", presetKind: "snippet" });
+        break;
+      case "create.quicklink":
+        setView({ kind: "create", presetKind: "quicklink" });
+        break;
+      case "open.preferences":
+        try {
+          await api.showPreferences();
+          await api.hidePalette();
+        } catch (e) {
+          setError(String(e));
+        }
+        break;
+      case "switch.workspace":
+        setView({ kind: "workspace-switcher" });
+        break;
+    }
+  }
+
   return (
     <>
       {view.kind === "create" && (
         <ItemForm
+          presetKind={view.presetKind}
           onDone={async () => {
             await refresh();
             backToPalette();
@@ -69,12 +94,11 @@ export default function App() {
       )}
       {view.kind === "palette" && (
         <Palette
-          items={items}
+          entries={entries}
           workspaces={workspaces}
           activeWorkspaceId={activeWorkspace}
-          onNew={() => setView({ kind: "create" })}
           onEdit={(item) => setView({ kind: "edit", item })}
-          onSwitchWorkspace={() => setView({ kind: "workspace-switcher" })}
+          onCommand={onCommand}
           refresh={refresh}
           onError={setError}
         />
@@ -82,12 +106,11 @@ export default function App() {
       {view.kind === "workspace-switcher" && (
         <>
           <Palette
-            items={items}
+            entries={entries}
             workspaces={workspaces}
             activeWorkspaceId={activeWorkspace}
-            onNew={() => setView({ kind: "create" })}
             onEdit={(item) => setView({ kind: "edit", item })}
-            onSwitchWorkspace={() => setView({ kind: "workspace-switcher" })}
+            onCommand={onCommand}
             refresh={refresh}
             onError={setError}
           />
@@ -101,7 +124,10 @@ export default function App() {
         </>
       )}
       {error && (
-        <div className="form-error" style={{ position: "absolute", bottom: 36, left: 0, right: 0 }}>
+        <div
+          className="form-error"
+          style={{ position: "absolute", bottom: 36, left: 0, right: 0 }}
+        >
           {error}
         </div>
       )}

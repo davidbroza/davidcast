@@ -1,27 +1,32 @@
 import Fuse from "fuse.js";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api";
-import type { Item, Workspace } from "../types";
-import { isQuicklink, isSnippet, extractPlaceholders } from "../types";
+import type { Item, PaletteEntry, Workspace } from "../types";
+import {
+  asItem,
+  extractPlaceholders,
+  isApp,
+  isCommand,
+  isQuicklink,
+  isSnippet,
+} from "../types";
 
 type Props = {
-  items: Item[];
+  entries: PaletteEntry[];
   workspaces: Workspace[];
   activeWorkspaceId: string;
-  onNew: () => void;
   onEdit: (item: Item) => void;
-  onSwitchWorkspace: () => void;
+  onCommand: (id: string) => void;
   refresh: () => Promise<void>;
   onError: (msg: string) => void;
 };
 
 export function Palette({
-  items,
+  entries,
   workspaces,
   activeWorkspaceId,
-  onNew,
   onEdit,
-  onSwitchWorkspace,
+  onCommand,
   refresh,
   onError,
 }: Props) {
@@ -34,23 +39,30 @@ export function Palette({
 
   const fuse = useMemo(
     () =>
-      new Fuse(items, {
-        keys: ["name", "keyword", "url", "text"],
+      new Fuse(entries, {
+        keys: [
+          { name: "name", weight: 2 },
+          { name: "keyword", weight: 1.5 },
+          "subtitle",
+          "url",
+          "text",
+          "path",
+        ],
         threshold: 0.4,
         ignoreLocation: true,
       }),
-    [items]
+    [entries]
   );
 
   const filtered = useMemo(() => {
     const q = query.trim();
-    if (!q) return items;
+    if (!q) return entries;
     return fuse.search(q).map((r) => r.item);
-  }, [query, items, fuse]);
+  }, [query, entries, fuse]);
 
   useEffect(() => {
     setSelected(0);
-  }, [query, items.length]);
+  }, [query, entries.length]);
 
   useEffect(() => {
     inputRef.current?.focus();
@@ -62,22 +74,23 @@ export function Palette({
     active?.scrollIntoView({ block: "nearest" });
   }, [selected]);
 
-  async function execute(item: Item) {
+  async function execute(entry: PaletteEntry) {
     try {
-      if (isSnippet(item)) {
-        await api.executeSnippet(item.id);
-      } else if (isQuicklink(item)) {
-        const placeholders = extractPlaceholders(item.url);
+      if (isCommand(entry)) {
+        onCommand(entry.id);
+      } else if (isApp(entry)) {
+        await api.executeApp(entry.path);
+      } else if (isSnippet(entry)) {
+        await api.executeSnippet(entry.id);
+      } else if (isQuicklink(entry)) {
+        const placeholders = extractPlaceholders(entry.url);
         const args: Record<string, string> = {};
-        if (placeholders.length > 0) {
-          // MVP: prompt for each placeholder inline. A fancier UI lands later.
-          for (const p of placeholders) {
-            const v = window.prompt(`${p}?`, "");
-            if (v === null) return;
-            args[p] = v;
-          }
+        for (const p of placeholders) {
+          const v = window.prompt(`${p}?`, "");
+          if (v === null) return;
+          args[p] = v;
         }
-        await api.executeQuicklink(item.id, args);
+        await api.executeQuicklink(entry.id, args);
       }
     } catch (e) {
       onError(String(e));
@@ -85,37 +98,87 @@ export function Palette({
   }
 
   async function handleKey(e: React.KeyboardEvent) {
-    if (e.key === "ArrowDown") {
+    const ctrlOnly = e.ctrlKey && !e.metaKey && !e.altKey;
+    const cmd = e.metaKey;
+
+    // ----- Navigation (arrows, vim j/k, emacs n/p) -----
+    if (
+      e.key === "ArrowDown" ||
+      (ctrlOnly && (e.key === "n" || e.key === "j"))
+    ) {
       e.preventDefault();
       setSelected((s) => Math.min(filtered.length - 1, s + 1));
-    } else if (e.key === "ArrowUp") {
+      return;
+    }
+    if (e.key === "ArrowUp" || (ctrlOnly && (e.key === "p" || e.key === "k"))) {
       e.preventDefault();
       setSelected((s) => Math.max(0, s - 1));
-    } else if (e.key === "Enter") {
+      return;
+    }
+
+    // ----- Run / close -----
+    if (e.key === "Enter") {
       e.preventDefault();
-      const item = filtered[selected];
-      if (item) execute(item);
-    } else if (e.key === "Escape") {
+      const entry = filtered[selected];
+      if (entry) execute(entry);
+      return;
+    }
+    if (e.key === "Escape") {
       e.preventDefault();
       api.hidePalette();
-    } else if (e.key === "n" && (e.metaKey || e.ctrlKey)) {
+      return;
+    }
+
+    // ----- Inline editing shortcuts (readline-ish) -----
+    if (ctrlOnly && e.key === "u") {
       e.preventDefault();
-      onNew();
-    } else if (e.key === "k" && (e.metaKey || e.ctrlKey)) {
+      setQuery("");
+      return;
+    }
+    if (ctrlOnly && e.key === "a") {
       e.preventDefault();
-      onSwitchWorkspace();
-    } else if (e.key === "e" && (e.metaKey || e.ctrlKey)) {
+      inputRef.current?.setSelectionRange(0, 0);
+      return;
+    }
+    if (ctrlOnly && e.key === "e") {
       e.preventDefault();
-      const item = filtered[selected];
+      const l = inputRef.current?.value.length ?? 0;
+      inputRef.current?.setSelectionRange(l, l);
+      return;
+    }
+
+    // ----- Item-level shortcuts (Cmd) -----
+    if (cmd && e.key === "n") {
+      e.preventDefault();
+      onCommand("create.snippet"); // default new-item; pick via form tabs
+      return;
+    }
+    if (cmd && e.key === "k") {
+      e.preventDefault();
+      onCommand("switch.workspace");
+      return;
+    }
+    if (cmd && e.key === ",") {
+      e.preventDefault();
+      onCommand("open.preferences");
+      return;
+    }
+    if (cmd && e.key === "e") {
+      e.preventDefault();
+      const entry = filtered[selected];
+      const item = entry && asItem(entry);
       if (item) onEdit(item);
-    } else if ((e.key === "Backspace" || e.key === "Delete") && (e.metaKey || e.ctrlKey)) {
+      return;
+    }
+    if (cmd && (e.key === "Backspace" || e.key === "Delete")) {
       e.preventDefault();
-      const item = filtered[selected];
+      const entry = filtered[selected];
+      const item = entry && asItem(entry);
       if (!item) return;
       if (!window.confirm(`Delete "${item.name}"?`)) return;
       try {
-        if (isSnippet(item)) await api.deleteSnippet(item.id);
-        else if (isQuicklink(item)) await api.deleteQuicklink(item.id);
+        if (item.kind === "snippet") await api.deleteSnippet(item.id);
+        else await api.deleteQuicklink(item.id);
         await refresh();
       } catch (err) {
         onError(String(err));
@@ -126,7 +189,11 @@ export function Palette({
   return (
     <div className="palette" onKeyDown={handleKey}>
       <div className="topbar">
-        <div className="workspace-pill" onClick={onSwitchWorkspace} title="Switch workspace (⌘K)">
+        <div
+          className="workspace-pill"
+          onClick={() => onCommand("switch.workspace")}
+          title="Switch workspace (⌘K)"
+        >
           <span
             className="workspace-dot"
             style={active?.color ? { background: active.color } : undefined}
@@ -142,7 +209,7 @@ export function Palette({
           ref={inputRef}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search snippets and quicklinks..."
+          placeholder="Type to search — snippets, quicklinks, apps, commands…"
           autoFocus
           spellCheck={false}
         />
@@ -151,47 +218,27 @@ export function Palette({
       <div className="results" ref={listRef}>
         {filtered.length === 0 ? (
           <div className="empty">
-            {items.length === 0 ? (
-              <>
-                <h3>No items yet</h3>
-                <p>
-                  Press <kbd>⌘N</kbd> to create your first snippet or quicklink.
-                </p>
-              </>
-            ) : (
-              <>
-                <h3>No matches</h3>
-                <p>Try a different search or <kbd>⌘N</kbd> to create a new item.</p>
-              </>
-            )}
+            <h3>No matches</h3>
+            <p>
+              Try a different search or <kbd>⌘N</kbd> to create a new item.
+            </p>
           </div>
         ) : (
-          filtered.map((item, i) => (
-            <div
-              key={item.id}
-              className={`row ${i === selected ? "active" : ""}`}
-              onClick={() => execute(item)}
-              onMouseEnter={() => setSelected(i)}
-            >
-              <div className={`row-icon ${item.kind}`}>
-                {item.kind === "snippet" ? "S" : "Q"}
-              </div>
-              <div className="row-main">
-                <div className="row-name">{item.name}</div>
-                <div className="row-sub">
-                  {isSnippet(item) ? previewText(item.text) : item.url}
-                </div>
-              </div>
-              <div className="row-right">
-                {item.keyword && <span className="keyword">{item.keyword}</span>}
-              </div>
-            </div>
+          filtered.map((entry, i) => (
+            <Row
+              key={entryKey(entry)}
+              entry={entry}
+              selected={i === selected}
+              onHover={() => setSelected(i)}
+              onClick={() => execute(entry)}
+            />
           ))
         )}
       </div>
 
       <div className="footer">
         <span><kbd>↵</kbd>Run</span>
+        <span><kbd>⌃N</kbd>/<kbd>⌃P</kbd>Nav</span>
         <span><kbd>⌘N</kbd>New</span>
         <span><kbd>⌘E</kbd>Edit</span>
         <span><kbd>⌘⌫</kbd>Delete</span>
@@ -203,7 +250,80 @@ export function Palette({
   );
 }
 
-function previewText(t: string): string {
-  const single = t.replace(/\s+/g, " ").trim();
-  return single.length > 80 ? single.slice(0, 77) + "..." : single;
+function entryKey(e: PaletteEntry): string {
+  if (isCommand(e)) return `cmd:${e.id}`;
+  if (isApp(e)) return `app:${e.path}`;
+  return `${e.kind}:${e.id}`;
+}
+
+function Row({
+  entry,
+  selected,
+  onHover,
+  onClick,
+}: {
+  entry: PaletteEntry;
+  selected: boolean;
+  onHover: () => void;
+  onClick: () => void;
+}) {
+  let iconClass = "";
+  let iconChar = "";
+  let name = "";
+  let sub = "";
+  let badge = "";
+
+  if (isCommand(entry)) {
+    iconClass = "command";
+    iconChar = "⚡";
+    name = entry.name;
+    sub = entry.subtitle;
+    badge = "Command";
+  } else if (isApp(entry)) {
+    iconClass = "app";
+    iconChar = entry.name.charAt(0).toUpperCase();
+    name = entry.name;
+    sub = entry.path;
+    badge = "App";
+  } else if (isSnippet(entry)) {
+    iconClass = "snippet";
+    iconChar = "S";
+    name = entry.name;
+    sub = oneLine(entry.text);
+    badge = "Snippet";
+  } else if (isQuicklink(entry)) {
+    iconClass = "quicklink";
+    iconChar = "Q";
+    name = entry.name;
+    sub = entry.url;
+    badge = "Quicklink";
+  }
+
+  const keyword =
+    (isSnippet(entry) || isQuicklink(entry)) && entry.keyword
+      ? entry.keyword
+      : null;
+
+  return (
+    <div
+      className={`row ${selected ? "active" : ""}`}
+      onClick={onClick}
+      onMouseEnter={onHover}
+    >
+      <div className={`row-icon ${iconClass}`}>{iconChar}</div>
+      <div className="row-main">
+        <div className="row-name">{name}</div>
+        <div className="row-sub">{sub}</div>
+      </div>
+      <div className="row-right">
+        {keyword && <span className="keyword">{keyword}</span>}
+        <span className="kind-badge">{badge}</span>
+      </div>
+    </div>
+  );
+}
+
+function oneLine(t: string): string {
+  const s = t.replace(/\s+/g, " ").trim();
+  return s.length > 80 ? s.slice(0, 77) + "…" : s;
 }
