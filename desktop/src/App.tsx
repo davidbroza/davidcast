@@ -1,51 +1,111 @@
-import { useState } from "react";
-import reactLogo from "./assets/react.svg";
-import { invoke } from "@tauri-apps/api/core";
-import "./App.css";
+import { listen } from "@tauri-apps/api/event";
+import { useCallback, useEffect, useState } from "react";
+import { ItemForm } from "./components/ItemForm";
+import { Palette } from "./components/Palette";
+import { WorkspaceSwitcher } from "./components/WorkspaceSwitcher";
+import { api } from "./api";
+import type { Item, Workspace } from "./types";
+import "./palette.css";
 
-function App() {
-  const [greetMsg, setGreetMsg] = useState("");
-  const [name, setName] = useState("");
+type View =
+  | { kind: "palette" }
+  | { kind: "create" }
+  | { kind: "edit"; item: Item }
+  | { kind: "workspace-switcher" };
 
-  async function greet() {
-    // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-    setGreetMsg(await invoke("greet", { name }));
-  }
+export default function App() {
+  const [items, setItems] = useState<Item[]>([]);
+  const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
+  const [activeWorkspace, setActiveWorkspace] = useState<string>("");
+  const [view, setView] = useState<View>({ kind: "palette" });
+  const [error, setError] = useState<string | null>(null);
+
+  const refresh = useCallback(async () => {
+    const [ws, its] = await Promise.all([api.listWorkspaces(), api.listItems()]);
+    setWorkspaces(ws.workspaces);
+    setActiveWorkspace(ws.active);
+    setItems(its);
+  }, []);
+
+  useEffect(() => {
+    refresh().catch((e) => setError(String(e)));
+  }, [refresh]);
+
+  // When the palette is re-shown via hotkey, reset to base view and refetch.
+  useEffect(() => {
+    const off = listen("palette:show", () => {
+      setView({ kind: "palette" });
+      setError(null);
+      refresh().catch((e) => setError(String(e)));
+    });
+    return () => {
+      off.then((fn) => fn());
+    };
+  }, [refresh]);
+
+  const backToPalette = () => setView({ kind: "palette" });
 
   return (
-    <main className="container">
-      <h1>Welcome to Tauri + React</h1>
-
-      <div className="row">
-        <a href="https://vite.dev" target="_blank">
-          <img src="/vite.svg" className="logo vite" alt="Vite logo" />
-        </a>
-        <a href="https://tauri.app" target="_blank">
-          <img src="/tauri.svg" className="logo tauri" alt="Tauri logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
-      </div>
-      <p>Click on the Tauri, Vite, and React logos to learn more.</p>
-
-      <form
-        className="row"
-        onSubmit={(e) => {
-          e.preventDefault();
-          greet();
-        }}
-      >
-        <input
-          id="greet-input"
-          onChange={(e) => setName(e.currentTarget.value)}
-          placeholder="Enter a name..."
+    <>
+      {view.kind === "create" && (
+        <ItemForm
+          onDone={async () => {
+            await refresh();
+            backToPalette();
+          }}
+          onCancel={backToPalette}
+          onError={setError}
         />
-        <button type="submit">Greet</button>
-      </form>
-      <p>{greetMsg}</p>
-    </main>
+      )}
+      {view.kind === "edit" && (
+        <ItemForm
+          initial={view.item}
+          onDone={async () => {
+            await refresh();
+            backToPalette();
+          }}
+          onCancel={backToPalette}
+          onError={setError}
+        />
+      )}
+      {view.kind === "palette" && (
+        <Palette
+          items={items}
+          workspaces={workspaces}
+          activeWorkspaceId={activeWorkspace}
+          onNew={() => setView({ kind: "create" })}
+          onEdit={(item) => setView({ kind: "edit", item })}
+          onSwitchWorkspace={() => setView({ kind: "workspace-switcher" })}
+          refresh={refresh}
+          onError={setError}
+        />
+      )}
+      {view.kind === "workspace-switcher" && (
+        <>
+          <Palette
+            items={items}
+            workspaces={workspaces}
+            activeWorkspaceId={activeWorkspace}
+            onNew={() => setView({ kind: "create" })}
+            onEdit={(item) => setView({ kind: "edit", item })}
+            onSwitchWorkspace={() => setView({ kind: "workspace-switcher" })}
+            refresh={refresh}
+            onError={setError}
+          />
+          <WorkspaceSwitcher
+            workspaces={workspaces}
+            activeId={activeWorkspace}
+            onClose={backToPalette}
+            onSwitched={refresh}
+            onError={setError}
+          />
+        </>
+      )}
+      {error && (
+        <div className="form-error" style={{ position: "absolute", bottom: 36, left: 0, right: 0 }}>
+          {error}
+        </div>
+      )}
+    </>
   );
 }
-
-export default App;
