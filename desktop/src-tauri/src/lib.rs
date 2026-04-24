@@ -23,6 +23,7 @@ pub fn run() {
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
             None,
         ))
+        .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             // On macOS, run as an accessory app — no dock icon, menu bar only.
             #[cfg(target_os = "macos")]
@@ -109,6 +110,7 @@ pub fn run() {
             commands::hide_and_paste,
             commands::show_preferences,
             commands::import_from_file,
+            commands::detect_raycast,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

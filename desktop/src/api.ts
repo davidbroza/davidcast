@@ -66,4 +66,6 @@ export const api = {
       "import_from_file",
       { path }
     ),
+  detectRaycast: () =>
+    invoke<{ installed: boolean; path: string | null }>("detect_raycast"),
 };

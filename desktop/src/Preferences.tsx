@@ -1,4 +1,5 @@
 import { disable, enable, isEnabled } from "@tauri-apps/plugin-autostart";
+import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { useCallback, useEffect, useState } from "react";
 import { api } from "./api";
 import type { Workspace } from "./types";
@@ -132,19 +133,7 @@ export function Preferences() {
       </section>
 
       <h2>Import</h2>
-      <section>
-        <div className="prefs-row">
-          <div className="label">
-            <div className="label-title">Import JSON file</div>
-            <div className="label-sub">
-              Paste the path to a JSON array. Accepts Raycast Snippet and
-              Quicklink exports, or any array with <code>{"{name, text}"}</code>{" "}
-              / <code>{"{name, url}"}</code> entries. Imports into the active workspace.
-            </div>
-          </div>
-        </div>
-        <ImportRow />
-      </section>
+      <ImportSection onError={setError} />
 
       <div className="prefs-meta">
         Store: <code>~/Library/Application Support/davidcast/</code>
@@ -153,69 +142,126 @@ export function Preferences() {
   );
 }
 
-function ImportRow() {
-  const [path, setPath] = useState("");
+function ImportSection({ onError }: { onError: (s: string) => void }) {
+  const [raycastInstalled, setRaycastInstalled] = useState<boolean | null>(null);
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<string | null>(null);
-  const [err, setErr] = useState<string | null>(null);
 
-  async function run() {
-    if (!path.trim()) return;
-    setBusy(true);
-    setResult(null);
-    setErr(null);
+  useEffect(() => {
+    api
+      .detectRaycast()
+      .then((r) => setRaycastInstalled(r.installed))
+      .catch(() => setRaycastInstalled(false));
+  }, []);
+
+  async function pickAndImport() {
+    if (busy) return;
     try {
-      const r = await api.importFromFile(path.trim());
+      const selected = await openDialog({
+        multiple: true,
+        filters: [{ name: "JSON", extensions: ["json"] }],
+        title: "Pick Raycast export file(s)",
+      });
+      if (!selected) return;
+      const paths = Array.isArray(selected) ? selected : [selected];
+      if (paths.length === 0) return;
+      setBusy(true);
+      setResult(null);
+      let totalS = 0,
+        totalQ = 0,
+        totalSkip = 0;
+      for (const p of paths) {
+        const r = await api.importFromFile(p);
+        totalS += r.snippets;
+        totalQ += r.quicklinks;
+        totalSkip += r.skipped;
+      }
       setResult(
-        `Imported ${r.snippets} snippet(s), ${r.quicklinks} quicklink(s)` +
-          (r.skipped ? `, skipped ${r.skipped}` : "") +
-          "."
+        `Imported ${totalS} snippet(s), ${totalQ} quicklink(s)` +
+          (totalSkip ? `, skipped ${totalSkip}` : "") +
+          " into the active workspace."
       );
     } catch (e) {
-      setErr(String(e));
+      onError(String(e));
     } finally {
       setBusy(false);
     }
   }
 
+  async function openRaycast() {
+    try {
+      await api.executeApp("/Applications/Raycast.app");
+    } catch {
+      /* ignore */
+    }
+  }
+
   return (
-    <>
-      <div className="prefs-add">
-        <input
-          placeholder="/Users/you/Downloads/raycast-quicklinks.json"
-          value={path}
-          onChange={(e) => setPath(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && run()}
-          spellCheck={false}
-        />
-        <button className="btn primary" onClick={run} disabled={busy}>
-          {busy ? "Importing…" : "Import"}
+    <section>
+      <div className="prefs-row">
+        <div className="label">
+          <div className="label-title">
+            {raycastInstalled === null
+              ? "Looking for Raycast…"
+              : raycastInstalled
+              ? "Raycast detected"
+              : "Import from JSON"}
+          </div>
+          <div className="label-sub">
+            {raycastInstalled ? (
+              <>
+                Raycast's data lives in an encrypted database, so we can't read
+                it directly. Export its JSON once and we'll take it from there:
+                <ol style={{ margin: "8px 0 0", paddingLeft: 18 }}>
+                  <li>
+                    Open Raycast, search <b>Export Quicklinks</b>, save the
+                    JSON somewhere you can find it.
+                  </li>
+                  <li>
+                    Same for <b>Export Snippets</b>.
+                  </li>
+                  <li>Click <b>Choose files…</b> below and pick both.</li>
+                </ol>
+              </>
+            ) : (
+              <>
+                Drop in a JSON array with <code>{"{name, text}"}</code> snippets
+                and/or <code>{"{name, link}"}</code> quicklinks. Raycast export
+                shapes are auto-detected.
+              </>
+            )}
+          </div>
+        </div>
+        {raycastInstalled && (
+          <button className="btn" onClick={openRaycast}>
+            Open Raycast
+          </button>
+        )}
+      </div>
+
+      <div className="prefs-row">
+        <div className="label">
+          <div className="label-title">Pick export file(s)</div>
+          <div className="label-sub">
+            You can pick more than one at once (⌘-click to multi-select).
+          </div>
+        </div>
+        <button className="btn primary" onClick={pickAndImport} disabled={busy}>
+          {busy ? "Importing…" : "Choose files…"}
         </button>
       </div>
+
       {result && (
         <div
           style={{
             color: "var(--accent)",
             fontSize: 12,
-            marginTop: 8,
             padding: "6px 0",
           }}
         >
-          {result}
+          ✓ {result}
         </div>
       )}
-      {err && (
-        <div
-          style={{
-            color: "var(--danger)",
-            fontSize: 12,
-            marginTop: 8,
-            padding: "6px 0",
-          }}
-        >
-          {err}
-        </div>
-      )}
-    </>
+    </section>
   );
 }

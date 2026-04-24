@@ -404,6 +404,40 @@ pub fn hide_and_paste(app: AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+// ---------- Raycast detection ----------
+
+#[derive(serde::Serialize)]
+pub struct RaycastStatus {
+    pub installed: bool,
+    pub path: Option<String>,
+}
+
+#[tauri::command]
+pub fn detect_raycast() -> RaycastStatus {
+    for candidate in ["/Applications/Raycast.app", "/System/Applications/Raycast.app"]
+    {
+        if std::path::Path::new(candidate).exists() {
+            return RaycastStatus {
+                installed: true,
+                path: Some(candidate.to_string()),
+            };
+        }
+    }
+    if let Some(home) = dirs::home_dir() {
+        let p = home.join("Applications").join("Raycast.app");
+        if p.exists() {
+            return RaycastStatus {
+                installed: true,
+                path: Some(p.to_string_lossy().to_string()),
+            };
+        }
+    }
+    RaycastStatus {
+        installed: false,
+        path: None,
+    }
+}
+
 // ---------- Import ----------
 
 #[derive(serde::Serialize)]
