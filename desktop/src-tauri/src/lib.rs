@@ -1,4 +1,5 @@
 mod actions;
+mod agents;
 mod apps;
 mod commands;
 mod hotkey;
@@ -97,7 +98,9 @@ pub fn run() {
             commands::delete_workspace,
             commands::list_items,
             commands::list_palette,
+            commands::list_agents,
             commands::execute_app,
+            commands::execute_agent,
             commands::create_snippet,
             commands::update_snippet,
             commands::delete_snippet,

@@ -45,6 +45,16 @@ export interface CommandEntry {
   subtitle: string;
 }
 
+export interface AgentEntry {
+  pid: number;
+  cwd: string;
+  project: string;
+  tty: string;
+  command: string;
+  elapsed: string;
+  terminal_app: string;
+}
+
 export type Item =
   | ({ kind: "snippet" } & Snippet)
   | ({ kind: "quicklink" } & Quicklink);
@@ -53,7 +63,8 @@ export type PaletteEntry =
   | ({ kind: "command" } & CommandEntry)
   | ({ kind: "snippet" } & Snippet)
   | ({ kind: "quicklink" } & Quicklink)
-  | ({ kind: "app" } & AppEntry);
+  | ({ kind: "app" } & AppEntry)
+  | ({ kind: "agent" } & AgentEntry);
 
 export function isSnippet(i: Item | PaletteEntry): i is { kind: "snippet" } & Snippet {
   return i.kind === "snippet";
@@ -69,6 +80,10 @@ export function isApp(i: PaletteEntry): i is { kind: "app" } & AppEntry {
 
 export function isCommand(i: PaletteEntry): i is { kind: "command" } & CommandEntry {
   return i.kind === "command";
+}
+
+export function isAgent(i: PaletteEntry): i is { kind: "agent" } & AgentEntry {
+  return i.kind === "agent";
 }
 
 export function asItem(e: PaletteEntry): Item | null {

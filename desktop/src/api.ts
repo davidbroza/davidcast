@@ -21,7 +21,10 @@ export const api = {
   // Items
   listItems: () => invoke<Item[]>("list_items"),
   listPalette: () => invoke<PaletteEntry[]>("list_palette"),
+  listAgents: () => invoke<import("./types").AgentEntry[]>("list_agents"),
   executeApp: (path: string) => invoke<void>("execute_app", { path }),
+  executeAgent: (args: { pid: number; tty: string; terminal_app: string }) =>
+    invoke<void>("execute_agent", args),
   showPreferences: () => invoke<void>("show_preferences"),
 
   // Snippets

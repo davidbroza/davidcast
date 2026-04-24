@@ -5,11 +5,14 @@ import type { Item, PaletteEntry, Workspace } from "../types";
 import {
   asItem,
   extractPlaceholders,
+  isAgent,
   isApp,
   isCommand,
   isQuicklink,
   isSnippet,
 } from "../types";
+
+type KindFilter = PaletteEntry["kind"] | null;
 
 type Props = {
   entries: PaletteEntry[];
@@ -34,22 +37,30 @@ export function Palette({
   const [selected, setSelected] = useState(0);
   const [toast, setToast] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<Item | null>(null);
+  const [kindFilter, setKindFilter] = useState<KindFilter>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const deleteTimer = useRef<number | null>(null);
 
   const active = workspaces.find((w) => w.id === activeWorkspaceId);
 
+  const visibleEntries = useMemo(
+    () => (kindFilter ? entries.filter((e) => e.kind === kindFilter) : entries),
+    [entries, kindFilter]
+  );
+
   const fuse = useMemo(
     () =>
-      new Fuse(entries, {
+      new Fuse(visibleEntries, {
         keys: [
           { name: "keyword", weight: 3 },
           { name: "name", weight: 2 },
+          { name: "project", weight: 2 },
           { name: "subtitle", weight: 0.8 },
           { name: "url", weight: 0.4 },
           { name: "text", weight: 0.3 },
           { name: "path", weight: 0.2 },
+          { name: "cwd", weight: 0.2 },
         ],
         // Tighter threshold = fewer weak matches bubbling into the list;
         // includeScore lets us tiebreak deterministically below.
@@ -58,12 +69,12 @@ export function Palette({
         includeScore: true,
         minMatchCharLength: 1,
       }),
-    [entries]
+    [visibleEntries]
   );
 
   const filtered = useMemo(() => {
     const q = query.trim();
-    if (!q) return entries;
+    if (!q) return visibleEntries;
     const results = fuse.search(q);
     // Primary: Fuse score. Secondary (stable): kind priority. Tertiary: name.
     // Without a tiebreaker the list can jitter on near-identical scores.
@@ -107,9 +118,21 @@ export function Palette({
   async function execute(entry: PaletteEntry) {
     try {
       if (isCommand(entry)) {
+        // Intercept commands we can handle inline before bubbling up.
+        if (entry.id === "show.agents") {
+          setQuery("");
+          setKindFilter("agent");
+          return;
+        }
         onCommand(entry.id);
       } else if (isApp(entry)) {
         await api.executeApp(entry.path);
+      } else if (isAgent(entry)) {
+        await api.executeAgent({
+          pid: entry.pid,
+          tty: entry.tty,
+          terminal_app: entry.terminal_app,
+        });
       } else if (isSnippet(entry)) {
         // Copy immediately, show toast, then hide+paste after a beat so the
         // confirmation is visible before focus returns to the prior app.
@@ -164,6 +187,10 @@ export function Palette({
       e.preventDefault();
       if (pendingDelete) {
         setPendingDelete(null);
+        return;
+      }
+      if (kindFilter) {
+        setKindFilter(null);
         return;
       }
       api.hidePalette();
@@ -262,11 +289,20 @@ export function Palette({
       </div>
 
       <div className="search">
+        {kindFilter && (
+          <div className="filter-chip" onClick={() => setKindFilter(null)}>
+            {filterLabel(kindFilter)} <span className="close">✕</span>
+          </div>
+        )}
         <input
           ref={inputRef}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Type to search — snippets, quicklinks, apps, commands…"
+          placeholder={
+            kindFilter === "agent"
+              ? "Search running agents by project…"
+              : "Type to search — snippets, quicklinks, apps, agents, commands…"
+          }
           autoFocus
           spellCheck={false}
         />
@@ -318,6 +354,7 @@ export function Palette({
 function entryKey(e: PaletteEntry): string {
   if (isCommand(e)) return `cmd:${e.id}`;
   if (isApp(e)) return `app:${e.path}`;
+  if (isAgent(e)) return `agent:${e.pid}`;
   return `${e.kind}:${e.id}`;
 }
 
@@ -325,17 +362,35 @@ function kindPriority(e: PaletteEntry): number {
   switch (e.kind) {
     case "command":
       return 0;
-    case "snippet":
+    case "agent":
       return 1;
-    case "quicklink":
+    case "snippet":
       return 2;
-    case "app":
+    case "quicklink":
       return 3;
+    case "app":
+      return 4;
   }
 }
 
 function nameOf(e: PaletteEntry): string {
-  return e.name ?? "";
+  if (e.kind === "agent") return e.project;
+  return (e as { name?: string }).name ?? "";
+}
+
+function filterLabel(k: PaletteEntry["kind"]): string {
+  switch (k) {
+    case "agent":
+      return "Agents";
+    case "snippet":
+      return "Snippets";
+    case "quicklink":
+      return "Quicklinks";
+    case "app":
+      return "Apps";
+    case "command":
+      return "Commands";
+  }
 }
 
 function Row({
@@ -379,6 +434,12 @@ function Row({
     name = entry.name;
     sub = entry.url;
     badge = "Quicklink";
+  } else if (isAgent(entry)) {
+    iconClass = "agent";
+    iconChar = "▸";
+    name = entry.project || "unknown project";
+    sub = `${entry.cwd} · ${entry.terminal_app} · ${entry.elapsed}`;
+    badge = "Agent";
   }
 
   const keyword =

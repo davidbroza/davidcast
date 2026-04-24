@@ -1,4 +1,5 @@
 use crate::actions;
+use crate::agents::{self, AgentEntry};
 use crate::apps::{self, AppEntry};
 use crate::store::Store;
 use crate::types::*;
@@ -149,6 +150,7 @@ pub enum PaletteEntry {
     Snippet(Snippet),
     Quicklink(Quicklink),
     App(AppEntry),
+    Agent(AgentEntry),
 }
 
 fn builtin_commands() -> Vec<CommandEntry> {
@@ -162,6 +164,11 @@ fn builtin_commands() -> Vec<CommandEntry> {
             id: "create.quicklink".into(),
             name: "Create Quicklink".into(),
             subtitle: "New quicklink in this workspace".into(),
+        },
+        CommandEntry {
+            id: "show.agents".into(),
+            name: "Show Running Agents".into(),
+            subtitle: "Claude CLI sessions — jump back to the terminal".into(),
         },
         CommandEntry {
             id: "open.preferences".into(),
@@ -183,9 +190,10 @@ pub fn list_palette(store: StoreState<'_>) -> Result<Vec<PaletteEntry>, String> 
     let quicklinks = s.load_quicklinks().map_err(|e| e.to_string())?;
     drop(s);
     let apps_list = apps::list_apps();
+    let agent_list = agents::list_agents();
 
     let mut out = Vec::with_capacity(
-        4 + snippets.len() + quicklinks.len() + apps_list.len(),
+        5 + snippets.len() + quicklinks.len() + apps_list.len() + agent_list.len(),
     );
     for c in builtin_commands() {
         out.push(PaletteEntry::Command(c));
@@ -196,10 +204,18 @@ pub fn list_palette(store: StoreState<'_>) -> Result<Vec<PaletteEntry>, String> 
     for x in quicklinks.into_iter().filter(|x| !x.deleted) {
         out.push(PaletteEntry::Quicklink(x));
     }
+    for a in agent_list {
+        out.push(PaletteEntry::Agent(a));
+    }
     for a in apps_list {
         out.push(PaletteEntry::App(a));
     }
     Ok(out)
+}
+
+#[tauri::command]
+pub fn list_agents() -> Vec<AgentEntry> {
+    agents::list_agents()
 }
 
 #[tauri::command]
@@ -213,6 +229,31 @@ pub fn execute_app(path: String, app: AppHandle) -> Result<(), String> {
         .status()
         .map_err(|e| format!("open {path} failed: {e}"))?;
     Ok(())
+}
+
+#[tauri::command]
+pub fn execute_agent(
+    pid: i32,
+    tty: String,
+    terminal_app: String,
+    app: AppHandle,
+) -> Result<(), String> {
+    use tauri::Manager;
+    if let Some(w) = app.get_webview_window("main") {
+        let _ = w.hide();
+    }
+    let entry = AgentEntry {
+        pid,
+        tty,
+        terminal_app,
+        // Other fields are ignored by `activate` — fill placeholders.
+        cwd: String::new(),
+        project: String::new(),
+        command: String::new(),
+        elapsed: String::new(),
+    };
+    std::thread::sleep(std::time::Duration::from_millis(60));
+    agents::activate(&entry)
 }
 
 // ---------- Snippet CRUD ----------
