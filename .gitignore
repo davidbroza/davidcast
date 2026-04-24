@@ -35,3 +35,6 @@ Thumbs.db
 # Runtime data (never commit the store)
 store/
 *.local.json
+
+# Claude Code local state
+.claude/
