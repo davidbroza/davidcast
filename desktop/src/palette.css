@@ -221,6 +221,29 @@ html, body, #root {
   }
 }
 
+.confirm-banner {
+  position: absolute;
+  bottom: 44px;
+  left: 14px;
+  right: 14px;
+  background: rgba(239, 106, 106, 0.15);
+  border: 1px solid rgba(239, 106, 106, 0.35);
+  color: #f6b5b5;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  text-align: center;
+  z-index: 15;
+  animation: toast-in 0.12s ease-out;
+}
+.confirm-banner kbd {
+  background: rgba(255, 255, 255, 0.1);
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-family: inherit;
+  color: var(--fg);
+}
+
 .row-main {
   flex: 1;
   min-width: 0;

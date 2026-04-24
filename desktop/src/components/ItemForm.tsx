@@ -31,7 +31,9 @@ export function ItemForm({ initial, presetKind, onDone, onCancel, onError }: Pro
     initial && isQuicklink(initial) ? initial.open_in : "default_browser"
   );
   const [saving, setSaving] = useState(false);
+  const [pendingDelete, setPendingDelete] = useState(false);
   const nameRef = useRef<HTMLInputElement>(null);
+  const deleteTimer = useRef<number | null>(null);
 
   useEffect(() => {
     nameRef.current?.focus();
@@ -110,13 +112,51 @@ export function ItemForm({ initial, presetKind, onDone, onCancel, onError }: Pro
     }
   }
 
+  async function deleteItem() {
+    if (!editing || !initial) return;
+    if (!pendingDelete) {
+      // Arm — wait for a second press.
+      setPendingDelete(true);
+      if (deleteTimer.current) window.clearTimeout(deleteTimer.current);
+      deleteTimer.current = window.setTimeout(() => setPendingDelete(false), 4000);
+      return;
+    }
+    // Confirmed.
+    if (deleteTimer.current) window.clearTimeout(deleteTimer.current);
+    setPendingDelete(false);
+    try {
+      if (isSnippet(initial)) await api.deleteSnippet(initial.id);
+      else if (isQuicklink(initial)) await api.deleteQuicklink(initial.id);
+      onDone();
+    } catch (e) {
+      onError(String(e));
+    }
+  }
+
   function handleKey(e: React.KeyboardEvent) {
     if (e.key === "Escape") {
       e.preventDefault();
+      if (pendingDelete) {
+        setPendingDelete(false);
+        return;
+      }
       onCancel();
-    } else if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+      return;
+    }
+    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
       e.preventDefault();
       save();
+      return;
+    }
+    if (
+      editing &&
+      e.metaKey &&
+      !e.ctrlKey &&
+      !e.altKey &&
+      (e.key === "Backspace" || e.key === "Delete")
+    ) {
+      e.preventDefault();
+      deleteItem();
     }
   }
 
@@ -205,11 +245,18 @@ export function ItemForm({ initial, presetKind, onDone, onCancel, onError }: Pro
 
         <div className="footer">
           <span><kbd>⌘↵</kbd>Save</span>
+          {editing && <span><kbd>⌘⌫</kbd>Delete</span>}
           <span><kbd>esc</kbd>Cancel</span>
           <div className="footer-spacer" />
           {saving && <span>Saving…</span>}
         </div>
       </div>
+      {pendingDelete && initial && (
+        <div className="confirm-banner">
+          Delete <b>{initial.name}</b>? Press <kbd>⌘⌫</kbd> again to confirm,{" "}
+          <kbd>esc</kbd> to cancel.
+        </div>
+      )}
     </div>
   );
 }

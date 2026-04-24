@@ -33,8 +33,10 @@ export function Palette({
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState(0);
   const [toast, setToast] = useState<string | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<Item | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
+  const deleteTimer = useRef<number | null>(null);
 
   const active = workspaces.find((w) => w.id === activeWorkspaceId);
 
@@ -42,15 +44,19 @@ export function Palette({
     () =>
       new Fuse(entries, {
         keys: [
+          { name: "keyword", weight: 3 },
           { name: "name", weight: 2 },
-          { name: "keyword", weight: 1.5 },
-          "subtitle",
-          "url",
-          "text",
-          "path",
+          { name: "subtitle", weight: 0.8 },
+          { name: "url", weight: 0.4 },
+          { name: "text", weight: 0.3 },
+          { name: "path", weight: 0.2 },
         ],
-        threshold: 0.4,
+        // Tighter threshold = fewer weak matches bubbling into the list;
+        // includeScore lets us tiebreak deterministically below.
+        threshold: 0.35,
         ignoreLocation: true,
+        includeScore: true,
+        minMatchCharLength: 1,
       }),
     [entries]
   );
@@ -58,12 +64,35 @@ export function Palette({
   const filtered = useMemo(() => {
     const q = query.trim();
     if (!q) return entries;
-    return fuse.search(q).map((r) => r.item);
-  }, [query, entries, fuse]);
+    const results = fuse.search(q);
+    // Primary: Fuse score. Secondary (stable): kind priority. Tertiary: name.
+    // Without a tiebreaker the list can jitter on near-identical scores.
+    results.sort((a, b) => {
+      const sa = a.score ?? 1;
+      const sb = b.score ?? 1;
+      if (Math.abs(sa - sb) > 0.02) return sa - sb;
+      const pa = kindPriority(a.item);
+      const pb = kindPriority(b.item);
+      if (pa !== pb) return pa - pb;
+      return nameOf(a.item).localeCompare(nameOf(b.item));
+    });
+    return results.map((r) => r.item);
+  }, [query, fuse]);
 
+  // Reset position only when the query changes — not when the list itself
+  // changes (e.g. after a delete). That way you stay in place.
   useEffect(() => {
     setSelected(0);
-  }, [query, entries.length]);
+  }, [query]);
+
+  // Clamp the selection if the list got shorter (e.g. the item we deleted
+  // was last, so selected would point past the end).
+  useEffect(() => {
+    setSelected((s) => {
+      const max = Math.max(0, filtered.length - 1);
+      return Math.min(s, max);
+    });
+  }, [filtered.length]);
 
   useEffect(() => {
     inputRef.current?.focus();
@@ -133,6 +162,10 @@ export function Palette({
     }
     if (e.key === "Escape") {
       e.preventDefault();
+      if (pendingDelete) {
+        setPendingDelete(null);
+        return;
+      }
       api.hidePalette();
       return;
     }
@@ -183,15 +216,31 @@ export function Palette({
       const entry = filtered[selected];
       const item = entry && asItem(entry);
       if (!item) return;
-      if (!window.confirm(`Delete "${item.name}"?`)) return;
+      await requestDelete(item);
+      return;
+    }
+  }
+
+  async function requestDelete(item: Item) {
+    if (pendingDelete && pendingDelete.id === item.id) {
+      // Second press = confirm.
+      if (deleteTimer.current) window.clearTimeout(deleteTimer.current);
+      setPendingDelete(null);
       try {
         if (item.kind === "snippet") await api.deleteSnippet(item.id);
         else await api.deleteQuicklink(item.id);
         await refresh();
-      } catch (err) {
-        onError(String(err));
+      } catch (e) {
+        onError(String(e));
       }
+      return;
     }
+    // First press = arm.
+    setPendingDelete(item);
+    if (deleteTimer.current) window.clearTimeout(deleteTimer.current);
+    deleteTimer.current = window.setTimeout(() => {
+      setPendingDelete((prev) => (prev?.id === item.id ? null : prev));
+    }, 4000);
   }
 
   return (
@@ -256,6 +305,12 @@ export function Palette({
       </div>
 
       {toast && <div className="toast">✓ {toast}</div>}
+      {pendingDelete && (
+        <div className="confirm-banner">
+          Delete <b>{pendingDelete.name}</b>? Press <kbd>⌘⌫</kbd> again to
+          confirm, <kbd>esc</kbd> to cancel.
+        </div>
+      )}
     </div>
   );
 }
@@ -264,6 +319,23 @@ function entryKey(e: PaletteEntry): string {
   if (isCommand(e)) return `cmd:${e.id}`;
   if (isApp(e)) return `app:${e.path}`;
   return `${e.kind}:${e.id}`;
+}
+
+function kindPriority(e: PaletteEntry): number {
+  switch (e.kind) {
+    case "command":
+      return 0;
+    case "snippet":
+      return 1;
+    case "quicklink":
+      return 2;
+    case "app":
+      return 3;
+  }
+}
+
+function nameOf(e: PaletteEntry): string {
+  return e.name ?? "";
 }
 
 function Row({
