@@ -93,6 +93,7 @@ pub fn run() {
             commands::execute_quicklink,
             commands::hide_palette,
             commands::show_preferences,
+            commands::import_from_file,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

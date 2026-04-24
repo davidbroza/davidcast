@@ -309,6 +309,166 @@ pub fn hide_palette(app: AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+// ---------- Import ----------
+
+#[derive(serde::Serialize)]
+pub struct ImportSummary {
+    pub snippets: usize,
+    pub quicklinks: usize,
+    pub skipped: usize,
+}
+
+#[tauri::command]
+pub fn import_from_file(path: String, store: StoreState<'_>) -> Result<ImportSummary, String> {
+    let content = std::fs::read_to_string(&path).map_err(|e| format!("read {path}: {e}"))?;
+    let parsed: serde_json::Value =
+        serde_json::from_str(&content).map_err(|e| format!("invalid JSON: {e}"))?;
+    let entries = parsed.as_array().ok_or("expected a JSON array at the top level")?;
+
+    let s = store.read();
+    let mut snippets = s.load_snippets().map_err(|e| e.to_string())?;
+    let mut quicklinks = s.load_quicklinks().map_err(|e| e.to_string())?;
+
+    let mut n_snip = 0;
+    let mut n_ql = 0;
+    let mut skipped = 0;
+
+    for entry in entries {
+        let Some(obj) = entry.as_object() else {
+            skipped += 1;
+            continue;
+        };
+        // Quicklink-shaped: has "link" or "url".
+        if let Some(url_raw) = obj
+            .get("link")
+            .or_else(|| obj.get("url"))
+            .and_then(|v| v.as_str())
+        {
+            let url = normalize_raycast_url(url_raw);
+            let name = obj
+                .get("name")
+                .and_then(|v| v.as_str())
+                .unwrap_or("Untitled")
+                .to_string();
+            let keyword = obj
+                .get("keyword")
+                .and_then(|v| v.as_str())
+                .filter(|s| !s.is_empty())
+                .map(|s| s.to_string());
+            let open_in = match obj.get("openWith").and_then(|v| v.as_str()) {
+                Some("com.google.Chrome") => OpenIn::Chrome,
+                Some("com.apple.Safari") => OpenIn::Safari,
+                _ => OpenIn::DefaultBrowser,
+            };
+            let ts = now();
+            quicklinks.push(Quicklink {
+                id: new_id(),
+                name,
+                keyword,
+                url,
+                open_in,
+                created_at: ts.clone(),
+                updated_at: ts,
+                deleted: false,
+                rev: 1,
+            });
+            n_ql += 1;
+            continue;
+        }
+        // Snippet-shaped: has "text".
+        if let Some(text) = obj.get("text").and_then(|v| v.as_str()) {
+            let name = obj
+                .get("name")
+                .and_then(|v| v.as_str())
+                .unwrap_or("Untitled")
+                .to_string();
+            let keyword = obj
+                .get("keyword")
+                .and_then(|v| v.as_str())
+                .filter(|s| !s.is_empty())
+                .map(|s| s.to_string());
+            let ts = now();
+            snippets.push(Snippet {
+                id: new_id(),
+                name,
+                keyword,
+                text: text.to_string(),
+                created_at: ts.clone(),
+                updated_at: ts,
+                deleted: false,
+                rev: 1,
+            });
+            n_snip += 1;
+            continue;
+        }
+        skipped += 1;
+    }
+
+    s.save_snippets(&snippets).map_err(|e| e.to_string())?;
+    s.save_quicklinks(&quicklinks).map_err(|e| e.to_string())?;
+
+    Ok(ImportSummary {
+        snippets: n_snip,
+        quicklinks: n_ql,
+        skipped,
+    })
+}
+
+/// Convert Raycast's `{argument name="foo" placeholder="..."}` syntax to `{foo}`.
+fn normalize_raycast_url(url: &str) -> String {
+    let mut out = String::with_capacity(url.len());
+    let mut rest = url;
+    while let Some(start) = rest.find("{argument") {
+        out.push_str(&rest[..start]);
+        let tail = &rest[start..];
+        let Some(end) = tail.find('}') else {
+            out.push_str(tail);
+            return out;
+        };
+        let tag = &tail[..end];
+        let name = tag
+            .find("name=\"")
+            .and_then(|i| {
+                let ns = &tag[i + 6..];
+                ns.find('"').map(|e| &ns[..e])
+            });
+        match name {
+            Some(n) => {
+                out.push('{');
+                out.push_str(n);
+                out.push('}');
+            }
+            None => out.push_str(&tail[..=end]),
+        }
+        rest = &tail[end + 1..];
+    }
+    out.push_str(rest);
+    out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn normalize_simple() {
+        assert_eq!(normalize_raycast_url("x{argument name=\"q\"}y"), "x{q}y");
+    }
+
+    #[test]
+    fn normalize_with_placeholder() {
+        assert_eq!(
+            normalize_raycast_url("search?q={argument name=\"query\" placeholder=\"Search\"}"),
+            "search?q={query}"
+        );
+    }
+
+    #[test]
+    fn normalize_preserves_non_argument() {
+        assert_eq!(normalize_raycast_url("{already}"), "{already}");
+    }
+}
+
 #[tauri::command]
 pub fn show_preferences(app: AppHandle) -> Result<(), String> {
     use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};

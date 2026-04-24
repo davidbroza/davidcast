@@ -54,4 +54,11 @@ export const api = {
 
   // Window
   hidePalette: () => invoke<void>("hide_palette"),
+
+  // Import
+  importFromFile: (path: string) =>
+    invoke<{ snippets: number; quicklinks: number; skipped: number }>(
+      "import_from_file",
+      { path }
+    ),
 };

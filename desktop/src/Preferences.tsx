@@ -131,10 +131,91 @@ export function Preferences() {
         </div>
       </section>
 
+      <h2>Import</h2>
+      <section>
+        <div className="prefs-row">
+          <div className="label">
+            <div className="label-title">Import JSON file</div>
+            <div className="label-sub">
+              Paste the path to a JSON array. Accepts Raycast Snippet and
+              Quicklink exports, or any array with <code>{"{name, text}"}</code>{" "}
+              / <code>{"{name, url}"}</code> entries. Imports into the active workspace.
+            </div>
+          </div>
+        </div>
+        <ImportRow />
+      </section>
+
       <div className="prefs-meta">
-        Store:{" "}
-        <code>~/Library/Application Support/davidcast/</code>
+        Store: <code>~/Library/Application Support/davidcast/</code>
       </div>
     </div>
+  );
+}
+
+function ImportRow() {
+  const [path, setPath] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  async function run() {
+    if (!path.trim()) return;
+    setBusy(true);
+    setResult(null);
+    setErr(null);
+    try {
+      const r = await api.importFromFile(path.trim());
+      setResult(
+        `Imported ${r.snippets} snippet(s), ${r.quicklinks} quicklink(s)` +
+          (r.skipped ? `, skipped ${r.skipped}` : "") +
+          "."
+      );
+    } catch (e) {
+      setErr(String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <>
+      <div className="prefs-add">
+        <input
+          placeholder="/Users/you/Downloads/raycast-quicklinks.json"
+          value={path}
+          onChange={(e) => setPath(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && run()}
+          spellCheck={false}
+        />
+        <button className="btn primary" onClick={run} disabled={busy}>
+          {busy ? "Importing…" : "Import"}
+        </button>
+      </div>
+      {result && (
+        <div
+          style={{
+            color: "var(--accent)",
+            fontSize: 12,
+            marginTop: 8,
+            padding: "6px 0",
+          }}
+        >
+          {result}
+        </div>
+      )}
+      {err && (
+        <div
+          style={{
+            color: "var(--danger)",
+            fontSize: 12,
+            marginTop: 8,
+            padding: "6px 0",
+          }}
+        >
+          {err}
+        </div>
+      )}
+    </>
   );
 }
