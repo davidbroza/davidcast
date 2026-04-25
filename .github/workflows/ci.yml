@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Cancel an in-flight run if a new push to the same ref lands.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: macos-latest
+    timeout-minutes: 25
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v3
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+          cache-dependency-path: desktop/pnpm-lock.yaml
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      # Cache target/ across runs — Tauri's transitive deps are heavy.
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: desktop/src-tauri
+
+      - name: Install dependencies
+        working-directory: desktop
+        run: pnpm install --frozen-lockfile
+
+      # `pnpm build` runs `tsc --noEmit && vite build` — the only frontend
+      # gate; failures here block the release workflow downstream.
+      - name: Frontend typecheck + build
+        working-directory: desktop
+        run: pnpm build
+
+      - name: Rust check
+        working-directory: desktop
+        run: cargo check --manifest-path src-tauri/Cargo.toml
+
+      - name: Rust tests
+        working-directory: desktop
+        run: cargo test --manifest-path src-tauri/Cargo.toml

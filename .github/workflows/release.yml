@@ -1,0 +1,100 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-latest
+    timeout-minutes: 35
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Need full history so we can compute notes since the previous tag.
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v3
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+          cache-dependency-path: desktop/pnpm-lock.yaml
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: desktop/src-tauri
+          key: release
+
+      - name: Install dependencies
+        working-directory: desktop
+        run: pnpm install --frozen-lockfile
+
+      - name: Build (Apple Silicon)
+        working-directory: desktop
+        run: pnpm tauri build --target aarch64-apple-darwin
+
+      - name: Build (Intel)
+        working-directory: desktop
+        run: pnpm tauri build --target x86_64-apple-darwin
+
+      # Tarball each .app — easier for users to drag onto /Applications,
+      # and easier for the API to upload (single file, no nested dir).
+      - name: Package .app bundles
+        run: |
+          cd desktop/src-tauri/target/aarch64-apple-darwin/release/bundle/macos
+          tar -czf "$GITHUB_WORKSPACE/davidcast-${GITHUB_REF_NAME}-aarch64.app.tar.gz" davidcast.app
+          cd "$GITHUB_WORKSPACE/desktop/src-tauri/target/x86_64-apple-darwin/release/bundle/macos"
+          tar -czf "$GITHUB_WORKSPACE/davidcast-${GITHUB_REF_NAME}-x86_64.app.tar.gz" davidcast.app
+
+      - name: Generate release notes
+        id: notes
+        run: |
+          PREV=$(git describe --tags --abbrev=0 "${GITHUB_REF_NAME}^" 2>/dev/null || echo "")
+          {
+            echo "## What's in this release"
+            echo
+            if [ -n "$PREV" ]; then
+              echo "_Changes since \`$PREV\`._"
+              echo
+              git log --no-merges "${PREV}..${GITHUB_REF_NAME}" --pretty='- %s'
+            else
+              echo "_Initial release — full history below._"
+              echo
+              git log --no-merges "${GITHUB_REF_NAME}" --pretty='- %s'
+            fi
+            echo
+            echo "## Install"
+            echo
+            echo "- **Apple Silicon:** download \`davidcast-${GITHUB_REF_NAME}-aarch64.app.tar.gz\` (or the matching \`.dmg\`)."
+            echo "- **Intel:** download \`davidcast-${GITHUB_REF_NAME}-x86_64.app.tar.gz\`."
+            echo "- The build is unsigned. First launch: right-click the \`.app\` → **Open** → confirm."
+          } > /tmp/notes.md
+
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ARTIFACTS=()
+          ARTIFACTS+=("davidcast-${GITHUB_REF_NAME}-aarch64.app.tar.gz")
+          ARTIFACTS+=("davidcast-${GITHUB_REF_NAME}-x86_64.app.tar.gz")
+          for f in desktop/src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/*.dmg \
+                   desktop/src-tauri/target/x86_64-apple-darwin/release/bundle/dmg/*.dmg; do
+            [ -f "$f" ] && ARTIFACTS+=("$f")
+          done
+          gh release create "${GITHUB_REF_NAME}" \
+            --title "${GITHUB_REF_NAME}" \
+            --notes-file /tmp/notes.md \
+            "${ARTIFACTS[@]}"
