@@ -38,3 +38,6 @@ store/
 
 # Claude Code local state
 .claude/
+
+# Local marketing screenshots — copies live in davidbroza.dev/public/davidcast/
+screenshots/

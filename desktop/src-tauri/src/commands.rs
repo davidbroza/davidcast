@@ -1,8 +1,12 @@
 use crate::actions;
 use crate::agents::{self, AgentEntry};
 use crate::apps::{self, AppEntry};
+use crate::clipboard::{self, ClipboardEntry};
+use crate::docker_ps::{self, DockerEntry};
+use crate::icons;
 use crate::store::Store;
 use crate::types::*;
+use crate::vite_ports::{self, VitePortEntry};
 use chrono::Utc;
 use parking_lot::RwLock;
 use std::collections::HashMap;
@@ -143,6 +147,16 @@ pub struct CommandEntry {
     pub subtitle: String,
 }
 
+/// Wire-format wrapper that pairs a container with the action mode the row
+/// represents. We push two of these per container — one for `shell`, one for
+/// `logs` — so each action is searchable on its own (e.g. "logs nginx").
+#[derive(serde::Serialize, Clone)]
+pub struct DockerPaletteEntry {
+    #[serde(flatten)]
+    pub container: DockerEntry,
+    pub mode: String, // "shell" | "logs"
+}
+
 #[derive(serde::Serialize)]
 #[serde(tag = "kind", rename_all = "lowercase")]
 pub enum PaletteEntry {
@@ -151,6 +165,13 @@ pub enum PaletteEntry {
     Quicklink(Quicklink),
     App(AppEntry),
     Agent(AgentEntry),
+    Vite(VitePortEntry),
+    Docker(DockerPaletteEntry),
+    // Constructed on the frontend (`api.listClipboard()` returns the inner
+    // shape; the kind tag is added in TS). Kept here so the wire union is
+    // exhaustive and matches the TS `PaletteEntry`.
+    #[allow(dead_code)]
+    Clipboard(ClipboardEntry),
 }
 
 fn builtin_commands() -> Vec<CommandEntry> {
@@ -166,9 +187,34 @@ fn builtin_commands() -> Vec<CommandEntry> {
             subtitle: "New quicklink in this workspace".into(),
         },
         CommandEntry {
+            id: "search.snippets".into(),
+            name: "Search Snippets".into(),
+            subtitle: "Browse only your snippets".into(),
+        },
+        CommandEntry {
+            id: "search.quicklinks".into(),
+            name: "Search Quicklinks".into(),
+            subtitle: "Browse only your quicklinks".into(),
+        },
+        CommandEntry {
+            id: "show.clipboard".into(),
+            name: "Show Clipboard History".into(),
+            subtitle: "Recent items you've copied — ⌘⇧V".into(),
+        },
+        CommandEntry {
             id: "show.agents".into(),
             name: "Show Running Agents".into(),
             subtitle: "Claude CLI sessions — jump back to the terminal".into(),
+        },
+        CommandEntry {
+            id: "show.vite".into(),
+            name: "Show Vite Ports".into(),
+            subtitle: "Running Vite dev servers — open in browser".into(),
+        },
+        CommandEntry {
+            id: "show.docker".into(),
+            name: "Show Docker Containers".into(),
+            subtitle: "Running containers — shell in or follow logs".into(),
         },
         CommandEntry {
             id: "open.preferences".into(),
@@ -191,9 +237,17 @@ pub fn list_palette(store: StoreState<'_>) -> Result<Vec<PaletteEntry>, String> 
     drop(s);
     let apps_list = apps::list_apps();
     let agent_list = agents::list_agents();
+    let vite_list = vite_ports::list_vite_ports();
+    let docker_list = docker_ps::list_docker_containers();
 
     let mut out = Vec::with_capacity(
-        5 + snippets.len() + quicklinks.len() + apps_list.len() + agent_list.len(),
+        builtin_commands().len()
+            + snippets.len()
+            + quicklinks.len()
+            + apps_list.len()
+            + agent_list.len()
+            + vite_list.len()
+            + docker_list.len() * 2,
     );
     for c in builtin_commands() {
         out.push(PaletteEntry::Command(c));
@@ -207,6 +261,19 @@ pub fn list_palette(store: StoreState<'_>) -> Result<Vec<PaletteEntry>, String> 
     for a in agent_list {
         out.push(PaletteEntry::Agent(a));
     }
+    for v in vite_list {
+        out.push(PaletteEntry::Vite(v));
+    }
+    for d in docker_list {
+        out.push(PaletteEntry::Docker(DockerPaletteEntry {
+            container: d.clone(),
+            mode: "shell".into(),
+        }));
+        out.push(PaletteEntry::Docker(DockerPaletteEntry {
+            container: d,
+            mode: "logs".into(),
+        }));
+    }
     for a in apps_list {
         out.push(PaletteEntry::App(a));
     }
@@ -216,6 +283,16 @@ pub fn list_palette(store: StoreState<'_>) -> Result<Vec<PaletteEntry>, String> 
 #[tauri::command]
 pub fn list_agents() -> Vec<AgentEntry> {
     agents::list_agents()
+}
+
+#[tauri::command]
+pub fn list_vite_ports() -> Vec<VitePortEntry> {
+    vite_ports::list_vite_ports()
+}
+
+#[tauri::command]
+pub fn list_docker_containers() -> Vec<DockerEntry> {
+    docker_ps::list_docker_containers()
 }
 
 #[tauri::command]
@@ -254,6 +331,35 @@ pub fn execute_agent(
     };
     std::thread::sleep(std::time::Duration::from_millis(60));
     agents::activate(&entry)
+}
+
+#[tauri::command]
+pub fn execute_vite(url: String, app: AppHandle) -> Result<(), String> {
+    use tauri::Manager;
+    if let Some(w) = app.get_webview_window("main") {
+        let _ = w.hide();
+    }
+    vite_ports::open_url(&url)
+}
+
+#[tauri::command]
+pub fn execute_docker_shell(id: String, app: AppHandle) -> Result<(), String> {
+    use tauri::Manager;
+    if let Some(w) = app.get_webview_window("main") {
+        let _ = w.hide();
+    }
+    std::thread::sleep(std::time::Duration::from_millis(60));
+    docker_ps::open_shell(&id)
+}
+
+#[tauri::command]
+pub fn execute_docker_logs(id: String, app: AppHandle) -> Result<(), String> {
+    use tauri::Manager;
+    if let Some(w) = app.get_webview_window("main") {
+        let _ = w.hide();
+    }
+    std::thread::sleep(std::time::Duration::from_millis(60));
+    docker_ps::open_logs(&id)
 }
 
 // ---------- Snippet CRUD ----------
@@ -637,6 +743,48 @@ mod tests {
     fn normalize_preserves_non_argument() {
         assert_eq!(normalize_raycast_url("{already}"), "{already}");
     }
+}
+
+// ---------- App icons ----------
+
+#[tauri::command]
+pub fn get_app_icon(path: String) -> Option<String> {
+    icons::get_app_icon(&path)
+}
+
+// ---------- Clipboard history ----------
+
+#[tauri::command]
+pub fn list_clipboard() -> Vec<ClipboardEntry> {
+    clipboard::list()
+}
+
+#[tauri::command]
+pub fn execute_clipboard(id: String, app: AppHandle) -> Result<(), String> {
+    use tauri_plugin_clipboard_manager::ClipboardExt;
+    let entry = clipboard::list()
+        .into_iter()
+        .find(|e| e.id == id)
+        .ok_or_else(|| format!("clipboard entry {id} not found"))?;
+    // Suppress so the watcher doesn't double-record our own write.
+    clipboard::suppress_next(&entry.text);
+    app.clipboard()
+        .write_text(entry.text.clone())
+        .map_err(|e| format!("clipboard: {e}"))?;
+    actions::hide_and_paste(&app);
+    Ok(())
+}
+
+#[tauri::command]
+pub fn delete_clipboard(id: String) -> Result<(), String> {
+    clipboard::delete(&id);
+    Ok(())
+}
+
+#[tauri::command]
+pub fn clear_clipboard() -> Result<(), String> {
+    clipboard::clear();
+    Ok(())
 }
 
 #[tauri::command]

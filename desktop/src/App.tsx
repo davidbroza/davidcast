@@ -12,12 +12,15 @@ type View =
   | { kind: "edit"; item: Item }
   | { kind: "workspace-switcher" };
 
+type InitialFilter = PaletteEntry["kind"] | null;
+
 export default function App() {
   const [entries, setEntries] = useState<PaletteEntry[]>([]);
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [activeWorkspace, setActiveWorkspace] = useState<string>("");
   const [view, setView] = useState<View>({ kind: "palette" });
   const [error, setError] = useState<string | null>(null);
+  const [initialFilter, setInitialFilter] = useState<InitialFilter>(null);
 
   const refresh = useCallback(async () => {
     const [ws, list] = await Promise.all([
@@ -34,17 +37,35 @@ export default function App() {
   }, [refresh]);
 
   useEffect(() => {
-    const off = listen("palette:show", () => {
+    const offShow = listen("palette:show", () => {
       setView({ kind: "palette" });
       setError(null);
+      setInitialFilter(null);
+      refresh().catch((e) => setError(String(e)));
+    });
+    const offClipboard = listen("clipboard:show", () => {
+      setView({ kind: "palette" });
+      setError(null);
+      setInitialFilter("clipboard");
       refresh().catch((e) => setError(String(e)));
     });
     return () => {
-      off.then((fn) => fn());
+      offShow.then((fn) => fn());
+      offClipboard.then((fn) => fn());
     };
   }, [refresh]);
 
-  const backToPalette = () => setView({ kind: "palette" });
+  // Auto-dismiss errors so a stale message doesn't sit forever.
+  useEffect(() => {
+    if (!error) return;
+    const t = window.setTimeout(() => setError(null), 6000);
+    return () => window.clearTimeout(t);
+  }, [error]);
+
+  const backToPalette = () => {
+    setInitialFilter(null);
+    setView({ kind: "palette" });
+  };
 
   async function onCommand(id: string) {
     switch (id) {
@@ -97,6 +118,7 @@ export default function App() {
           entries={entries}
           workspaces={workspaces}
           activeWorkspaceId={activeWorkspace}
+          initialFilter={initialFilter}
           onEdit={(item) => setView({ kind: "edit", item })}
           onCommand={onCommand}
           refresh={refresh}
@@ -109,6 +131,7 @@ export default function App() {
             entries={entries}
             workspaces={workspaces}
             activeWorkspaceId={activeWorkspace}
+            initialFilter={initialFilter}
             onEdit={(item) => setView({ kind: "edit", item })}
             onCommand={onCommand}
             refresh={refresh}
@@ -124,11 +147,15 @@ export default function App() {
         </>
       )}
       {error && (
-        <div
-          className="form-error"
-          style={{ position: "absolute", bottom: 36, left: 0, right: 0 }}
-        >
-          {error}
+        <div className="error-banner" role="alert">
+          <span className="error-banner-text">{error}</span>
+          <button
+            type="button"
+            aria-label="Dismiss"
+            onClick={() => setError(null)}
+          >
+            ✕
+          </button>
         </div>
       )}
     </>

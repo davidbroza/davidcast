@@ -1,10 +1,14 @@
 mod actions;
 mod agents;
 mod apps;
+mod clipboard;
 mod commands;
+mod docker_ps;
 mod hotkey;
+mod icons;
 mod store;
 mod types;
+mod vite_ports;
 
 use parking_lot::RwLock;
 use tauri::{
@@ -36,12 +40,25 @@ pub fn run() {
             let store = store::Store::load().expect("failed to load davidcast store");
             app.manage(RwLock::new(store));
 
-            // Register global hotkey.
+            // Register global hotkeys: palette + clipboard.
             let handle = app.handle().clone();
-            let shortcut = hotkey::default_shortcut();
-            app.global_shortcut().on_shortcut(shortcut, move |_app, sc, event| {
-                hotkey::on_shortcut(&handle, sc, event.state);
+            let palette_sc = hotkey::default_shortcut();
+            let clipboard_sc = hotkey::clipboard_shortcut();
+            app.global_shortcut().on_shortcut(palette_sc, {
+                let handle = handle.clone();
+                move |_app, sc, event| {
+                    hotkey::on_palette_shortcut(&handle, sc, event.state);
+                }
             })?;
+            app.global_shortcut().on_shortcut(clipboard_sc, {
+                let handle = handle.clone();
+                move |_app, sc, event| {
+                    hotkey::on_clipboard_shortcut(&handle, sc, event.state);
+                }
+            })?;
+
+            // Background clipboard watcher.
+            clipboard::start_watcher(app.handle().clone());
 
             // Build the menu-bar tray.
             let show_i = MenuItem::with_id(app, "show", "Open davidcast", true, Some("Ctrl+Space"))?;
@@ -99,8 +116,18 @@ pub fn run() {
             commands::list_items,
             commands::list_palette,
             commands::list_agents,
+            commands::list_vite_ports,
+            commands::list_docker_containers,
             commands::execute_app,
             commands::execute_agent,
+            commands::execute_vite,
+            commands::execute_docker_shell,
+            commands::execute_docker_logs,
+            commands::get_app_icon,
+            commands::list_clipboard,
+            commands::execute_clipboard,
+            commands::delete_clipboard,
+            commands::clear_clipboard,
             commands::create_snippet,
             commands::update_snippet,
             commands::delete_snippet,

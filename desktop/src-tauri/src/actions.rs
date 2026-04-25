@@ -1,3 +1,4 @@
+use crate::clipboard as clip;
 use crate::types::*;
 use std::collections::HashMap;
 use tauri::{AppHandle, Manager};
@@ -6,6 +7,7 @@ pub fn execute_snippet(app: &AppHandle, s: &Snippet) -> Result<(), String> {
     use tauri_plugin_clipboard_manager::ClipboardExt;
     // Copying to the clipboard is the primary action. Frontend then shows a
     // brief toast and calls `hide_and_paste` to complete the flow.
+    clip::suppress_next(&s.text);
     app.clipboard()
         .write_text(s.text.clone())
         .map_err(|e| format!("clipboard: {e}"))?;

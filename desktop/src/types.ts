@@ -55,6 +55,33 @@ export interface AgentEntry {
   terminal_app: string;
 }
 
+export interface VitePortEntry {
+  pid: number;
+  port: number;
+  host: string;
+  url: string;
+  cwd: string;
+  project: string;
+  command: string;
+  elapsed: string;
+}
+
+export interface DockerEntry {
+  id: string;
+  name: string;
+  image: string;
+  status: string;
+  ports: string;
+  mode: "shell" | "logs";
+}
+
+export interface ClipboardEntry {
+  id: string;
+  text: string;
+  copied_at: string;
+  char_count: number;
+}
+
 export type Item =
   | ({ kind: "snippet" } & Snippet)
   | ({ kind: "quicklink" } & Quicklink);
@@ -64,7 +91,10 @@ export type PaletteEntry =
   | ({ kind: "snippet" } & Snippet)
   | ({ kind: "quicklink" } & Quicklink)
   | ({ kind: "app" } & AppEntry)
-  | ({ kind: "agent" } & AgentEntry);
+  | ({ kind: "agent" } & AgentEntry)
+  | ({ kind: "vite" } & VitePortEntry)
+  | ({ kind: "docker" } & DockerEntry)
+  | ({ kind: "clipboard" } & ClipboardEntry);
 
 export function isSnippet(i: Item | PaletteEntry): i is { kind: "snippet" } & Snippet {
   return i.kind === "snippet";
@@ -84,6 +114,22 @@ export function isCommand(i: PaletteEntry): i is { kind: "command" } & CommandEn
 
 export function isAgent(i: PaletteEntry): i is { kind: "agent" } & AgentEntry {
   return i.kind === "agent";
+}
+
+export function isVite(i: PaletteEntry): i is { kind: "vite" } & VitePortEntry {
+  return i.kind === "vite";
+}
+
+export function isDocker(
+  i: PaletteEntry
+): i is { kind: "docker" } & DockerEntry {
+  return i.kind === "docker";
+}
+
+export function isClipboard(
+  i: PaletteEntry
+): i is { kind: "clipboard" } & ClipboardEntry {
+  return i.kind === "clipboard";
 }
 
 export function asItem(e: PaletteEntry): Item | null {

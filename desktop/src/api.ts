@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import type {
+  ClipboardEntry,
   Item,
   OpenIn,
   PaletteEntry,
@@ -22,9 +23,24 @@ export const api = {
   listItems: () => invoke<Item[]>("list_items"),
   listPalette: () => invoke<PaletteEntry[]>("list_palette"),
   listAgents: () => invoke<import("./types").AgentEntry[]>("list_agents"),
+  listVitePorts: () =>
+    invoke<import("./types").VitePortEntry[]>("list_vite_ports"),
+  listDockerContainers: () =>
+    invoke<import("./types").DockerEntry[]>("list_docker_containers"),
   executeApp: (path: string) => invoke<void>("execute_app", { path }),
+  // Tauri converts Rust snake_case args to camelCase on the wire — `terminal_app`
+  // becomes `terminalApp`. Matches `commands::execute_agent(.., terminal_app: String, ..)`.
   executeAgent: (args: { pid: number; tty: string; terminal_app: string }) =>
-    invoke<void>("execute_agent", args),
+    invoke<void>("execute_agent", {
+      pid: args.pid,
+      tty: args.tty,
+      terminalApp: args.terminal_app,
+    }),
+  executeVite: (url: string) => invoke<void>("execute_vite", { url }),
+  executeDockerShell: (id: string) =>
+    invoke<void>("execute_docker_shell", { id }),
+  executeDockerLogs: (id: string) =>
+    invoke<void>("execute_docker_logs", { id }),
   showPreferences: () => invoke<void>("show_preferences"),
 
   // Snippets
@@ -62,6 +78,17 @@ export const api = {
   // Window
   hidePalette: () => invoke<void>("hide_palette"),
   hideAndPaste: () => invoke<void>("hide_and_paste"),
+
+  // App icons (data URL, cached)
+  getAppIcon: (path: string) =>
+    invoke<string | null>("get_app_icon", { path }),
+
+  // Clipboard history
+  listClipboard: () => invoke<ClipboardEntry[]>("list_clipboard"),
+  executeClipboard: (id: string) => invoke<void>("execute_clipboard", { id }),
+  deleteClipboardEntry: (id: string) =>
+    invoke<void>("delete_clipboard", { id }),
+  clearClipboard: () => invoke<void>("clear_clipboard"),
 
   // Import
   importFromFile: (path: string) =>

@@ -10,7 +10,12 @@
   --danger: #ef6a6a;
   --badge-snippet: #6aaaef;
   --badge-quicklink: #c56aef;
-  --shadow: 0 20px 60px rgba(0, 0, 0, 0.45);
+  --shadow: 0 28px 80px rgba(0, 0, 0, 0.55), 0 6px 18px rgba(0, 0, 0, 0.35);
+  --badge-clipboard: #e0a960;
+  --badge-agent: #d08ae0;
+  --badge-vite: #f5e961;
+  --badge-docker: #5ab8e0;
+  --badge-logs: #8aa2b8;
 }
 
 * {
@@ -31,15 +36,25 @@ html, body, #root {
   cursor: default;
 }
 
+/* The palette window is transparent; padding around the body gives the
+ * CSS shadow room to render outside the rounded surface. The macOS
+ * window shadow (`shadow: true` in tauri.conf.json) is rectangular and
+ * leaks past the rounded corners — we render our own shadow instead. */
+body[data-view="palette"] {
+  padding: 18px 22px 26px;
+  box-sizing: border-box;
+}
+
 .palette {
-  height: 100vh;
-  width: 100vw;
+  position: relative;
+  height: 100%;
+  width: 100%;
   display: flex;
   flex-direction: column;
   background: var(--bg);
   backdrop-filter: blur(30px) saturate(160%);
   -webkit-backdrop-filter: blur(30px) saturate(160%);
-  border-radius: 12px;
+  border-radius: 14px;
   border: 1px solid var(--border);
   box-shadow: var(--shadow);
   overflow: hidden;
@@ -157,36 +172,67 @@ html, body, #root {
 
 .row-icon {
   flex-shrink: 0;
-  width: 22px;
-  height: 22px;
+  width: 26px;
+  height: 26px;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 4px;
+  border-radius: 6px;
   font-size: 12px;
   font-weight: 600;
   color: white;
+  overflow: hidden;
 }
-.row-icon.snippet {
-  background: var(--badge-snippet);
+.row-icon.glyph {
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
 }
-.row-icon.quicklink {
-  background: var(--badge-quicklink);
+.row-icon.glyph.snippet {
+  background: linear-gradient(135deg, #6aaaef, #3f7bd0);
+  color: #fff;
 }
-.row-icon.app {
+.row-icon.glyph.quicklink {
+  background: linear-gradient(135deg, #c56aef, #8a3fd0);
+  color: #fff;
+}
+.row-icon.glyph.command {
+  background: linear-gradient(135deg, #2c2c34, #1c1c24);
+  color: var(--accent);
+}
+.row-icon.glyph.agent {
+  background: linear-gradient(135deg, #d08ae0, #7a4cb0);
+  color: #fff;
+}
+.row-icon.glyph.clipboard {
+  background: linear-gradient(135deg, #e0a960, #b97a35);
+  color: #fff;
+}
+.row-icon.glyph.vite {
+  background: linear-gradient(135deg, #f5e961, #c5a72a);
+  color: #2c2308;
+}
+.row-icon.glyph.docker {
+  background: linear-gradient(135deg, #5ab8e0, #2a72a8);
+  color: #fff;
+}
+.row-icon.glyph.docker.logs {
+  background: linear-gradient(135deg, #5a708a, #364658);
+  color: #d8e4f0;
+}
+.row-icon.app-icon {
+  background: transparent;
+  box-shadow: none;
+}
+.row-icon.app-icon img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+  -webkit-user-drag: none;
+}
+.row-icon.app-fallback {
   background: linear-gradient(135deg, #4a4a56, #35353f);
   color: #e8e8ea;
   font-weight: 500;
-}
-.row-icon.command {
-  background: rgba(255, 255, 255, 0.08);
-  color: var(--accent);
-  font-size: 13px;
-}
-.row-icon.agent {
-  background: linear-gradient(135deg, #d08ae0, #8860b8);
-  color: #fff;
-  font-size: 14px;
 }
 
 .filter-chip {
@@ -435,11 +481,63 @@ html, body, #root {
   padding: 0 14px 8px;
 }
 
+/* Top-level error banner — dismissible, opaque, lives outside the palette
+ * frame so it doesn't overlap content rows. Auto-dismisses after 6s in App. */
+.error-banner {
+  position: fixed;
+  top: 12px;
+  left: 28px;
+  right: 32px;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 14px;
+  background: rgba(48, 14, 14, 0.97);
+  border: 1px solid rgba(239, 106, 106, 0.55);
+  border-radius: 10px;
+  color: #ffe1e1;
+  font-size: 12px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+  animation: error-in 0.18s ease-out;
+}
+.error-banner-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.error-banner button {
+  background: transparent;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  opacity: 0.65;
+  font-size: 13px;
+  line-height: 1;
+  padding: 2px 4px;
+}
+.error-banner button:hover {
+  opacity: 1;
+}
+@keyframes error-in {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
 /* ---- Workspace switcher overlay ---- */
 
 .overlay {
-  position: absolute;
-  inset: 0;
+  /* Anchored to the palette frame (which is inset by the body padding for
+   * the rounded shadow) — not to the full viewport, so the dim backdrop
+   * doesn't bleed into the transparent shadow area outside .palette. */
+  position: fixed;
+  top: 18px;
+  left: 22px;
+  right: 22px;
+  bottom: 26px;
+  border-radius: 14px;
   display: flex;
   align-items: flex-start;
   justify-content: center;
