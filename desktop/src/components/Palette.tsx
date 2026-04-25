@@ -1,5 +1,4 @@
 import Fuse from "fuse.js";
-import { listen } from "@tauri-apps/api/event";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api, type Settings } from "../api";
 import type { Session } from "../App";
@@ -162,16 +161,32 @@ export function Palette({
       return ranked;
     }
     const results = fuse.search(q);
-    results.sort((a, b) => {
-      const sa = a.score ?? 1;
-      const sb = b.score ?? 1;
-      if (Math.abs(sa - sb) > 0.02) return sa - sb;
+    // Adjust Fuse's raw match score with two boosts:
+    //   - prefix bonus: strong (-0.4) — typing "i" should land on iTerm,
+    //     not on something that fuzzy-contains an i three chars deep.
+    //   - recents bonus: gentler (-0.18) — what you actually use beats
+    //     equally-good matches you've never picked.
+    // Lower effective score = better, same as Fuse.
+    const recents = loadRecents();
+    const ql = q.toLowerCase();
+    const scored = results.map((r) => {
+      const item = r.item;
+      let score = r.score ?? 1;
+      const startsName = nameOf(item).toLowerCase().startsWith(ql);
+      const kw = (item as { keyword?: string }).keyword;
+      const startsKeyword = kw ? kw.toLowerCase().startsWith(ql) : false;
+      if (startsName || startsKeyword) score -= 0.4;
+      if (recents[entryKey(item)]) score -= 0.18;
+      return { item, score };
+    });
+    scored.sort((a, b) => {
+      if (Math.abs(a.score - b.score) > 0.02) return a.score - b.score;
       const pa = kindPriority(a.item);
       const pb = kindPriority(b.item);
       if (pa !== pb) return pa - pb;
       return nameOf(a.item).localeCompare(nameOf(b.item));
     });
-    return results.map((r) => r.item);
+    return scored.map((r) => r.item);
   }, [query, fuse, visibleEntries]);
 
   useEffect(() => {
@@ -189,17 +204,17 @@ export function Palette({
     inputRef.current?.focus();
   }, []);
 
-  // When the palette is reopened (Alt+Space toggle), wipe the previous query
-  // and any active filter so the user starts on a clean slate.
+  // Clear state when the palette window loses focus (i.e. *before* the next
+  // open). Doing this on `palette:show` would flash the old text for a frame;
+  // doing it on blur means the next open paints blank from the start.
   useEffect(() => {
-    const off = listen("palette:show", () => {
+    const onBlur = () => {
       setQuery("");
       setSelected(0);
       setKindFilter(initialFilter ?? null);
-    });
-    return () => {
-      off.then((fn) => fn());
     };
+    window.addEventListener("blur", onBlur);
+    return () => window.removeEventListener("blur", onBlur);
   }, [initialFilter]);
 
   // No-results detection: when the user has typed something but nothing
