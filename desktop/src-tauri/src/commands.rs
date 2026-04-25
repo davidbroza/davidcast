@@ -8,6 +8,7 @@ use crate::files::{self, FileEntry, FileSearchOpts};
 use crate::icons;
 use crate::store::Store;
 use crate::types::*;
+use crate::themes::{self, Theme};
 use crate::vite_ports::{self, VitePortEntry};
 use crate::window_mgmt;
 use chrono::Utc;
@@ -152,6 +153,45 @@ pub fn copy_file_image(path: String, app: AppHandle) -> Result<(), String> {
 #[tauri::command]
 pub fn file_thumbnail(path: String) -> Option<String> {
     files::thumbnail_data_url(&path)
+}
+
+// ---------- Themes ----------
+
+#[tauri::command]
+pub fn list_themes() -> Vec<Theme> {
+    themes::list_all()
+}
+
+#[tauri::command]
+pub fn get_active_theme(store: StoreState<'_>) -> Theme {
+    let id = store.read().config.theme.clone();
+    themes::load(&id).unwrap_or_else(|| {
+        // Fall back to default if the configured id was deleted out from
+        // under us (e.g. user removed a custom theme file).
+        themes::load("default").expect("default theme always present")
+    })
+}
+
+#[tauri::command]
+pub fn set_active_theme(id: String, store: StoreState<'_>) -> Result<Theme, String> {
+    if themes::load(&id).is_none() {
+        return Err(format!("theme not found: {id}"));
+    }
+    let mut s = store.write();
+    s.config.theme = id.clone();
+    s.save_config().map_err(|e| e.to_string())?;
+    drop(s);
+    themes::load(&id).ok_or_else(|| "theme vanished mid-update".to_string())
+}
+
+#[tauri::command]
+pub fn import_theme(path: String) -> Result<Theme, String> {
+    themes::import_from_path(&path)
+}
+
+#[tauri::command]
+pub fn themes_dir() -> Option<String> {
+    themes::themes_dir().map(|p| p.to_string_lossy().into_owned())
 }
 
 // ---------- Window management ----------
@@ -434,6 +474,11 @@ fn builtin_commands() -> Vec<CommandEntry> {
             id: "wm.center".into(),
             name: "Window: Center".into(),
             subtitle: "Two-thirds size, centred".into(),
+        },
+        CommandEntry {
+            id: "themes.switch".into(),
+            name: "Switch Theme".into(),
+            subtitle: "Pick a colour theme — built-in or your own JSON".into(),
         },
         CommandEntry {
             id: "open.preferences".into(),

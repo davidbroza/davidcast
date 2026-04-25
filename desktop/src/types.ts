@@ -102,6 +102,13 @@ export interface FileSearchOpts {
   limit?: number;
 }
 
+export interface Theme {
+  id: string;
+  name: string;
+  tokens: Record<string, string>;
+  builtin: boolean;
+}
+
 export interface ClipboardEntry {
   id: string;
   text: string;
@@ -122,6 +129,7 @@ export type PaletteEntry =
   | ({ kind: "vite" } & VitePortEntry)
   | ({ kind: "docker" } & DockerEntry)
   | ({ kind: "file" } & FileEntry)
+  | ({ kind: "theme" } & Theme)
   | ({ kind: "clipboard" } & ClipboardEntry);
 
 export function isSnippet(i: Item | PaletteEntry): i is { kind: "snippet" } & Snippet {
@@ -156,6 +164,10 @@ export function isDocker(
 
 export function isFile(i: PaletteEntry): i is { kind: "file" } & FileEntry {
   return i.kind === "file";
+}
+
+export function isTheme(i: PaletteEntry): i is { kind: "theme" } & Theme {
+  return i.kind === "theme";
 }
 
 export function isClipboard(

@@ -14,9 +14,11 @@ import {
   isFile,
   isQuicklink,
   isSnippet,
+  isTheme,
   isVite,
 } from "../types";
 import type { FileSearchOpts } from "../types";
+import { applyTheme } from "../App";
 
 type KindFilter = PaletteEntry["kind"] | null;
 
@@ -123,6 +125,7 @@ export function Palette({
   const [clipboardEntries, setClipboardEntries] = useState<PaletteEntry[]>([]);
   const [fileEntries, setFileEntries] = useState<PaletteEntry[]>([]);
   const [screenshotMode, setScreenshotMode] = useState(false);
+  const [themeEntries, setThemeEntries] = useState<PaletteEntry[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const deleteTimer = useRef<number | null>(null);
@@ -186,9 +189,29 @@ export function Palette({
     if (kindFilter !== "file") setScreenshotMode(false);
   }, [kindFilter]);
 
+  // Theme picker — list_themes is fast (mostly built-ins), fetched once
+  // each time the filter is set.
+  useEffect(() => {
+    if (kindFilter !== "theme") return;
+    let cancelled = false;
+    api
+      .listThemes()
+      .then((rows) => {
+        if (cancelled) return;
+        setThemeEntries(
+          rows.map((r) => ({ kind: "theme" as const, ...r }))
+        );
+      })
+      .catch((e) => onError(String(e)));
+    return () => {
+      cancelled = true;
+    };
+  }, [kindFilter, onError]);
+
   const visibleEntries = useMemo(() => {
     if (kindFilter === "clipboard") return clipboardEntries;
     if (kindFilter === "file") return fileEntries;
+    if (kindFilter === "theme") return themeEntries;
     if (kindFilter) return entries.filter((e) => e.kind === kindFilter);
     // Unfiltered view: respect inline-display settings. Vite/Docker entries
     // are still reachable via "Show Vite Ports" / "Show Docker Containers"
@@ -198,7 +221,7 @@ export function Palette({
       if (e.kind === "docker" && !settings.show_docker_inline) return false;
       return true;
     });
-  }, [entries, clipboardEntries, fileEntries, kindFilter, settings]);
+  }, [entries, clipboardEntries, fileEntries, themeEntries, kindFilter, settings]);
 
   const fuse = useMemo(
     () =>
@@ -401,6 +424,10 @@ export function Palette({
             setQuery("");
             setKindFilter("file");
             break;
+          case "themes.switch":
+            setQuery("");
+            setKindFilter("theme");
+            break;
           case "files.screenshots":
             // Dedicated mode: scans the user-configured screenshot dirs
             // (default ~/Desktop), shows a side preview, and copies the
@@ -460,6 +487,11 @@ export function Palette({
         if (outcome !== "cancelled") {
           await api.executeQuicklink(entry.id, args);
         }
+      } else if (isTheme(entry)) {
+        const t = await api.setActiveTheme(entry.id);
+        applyTheme(t);
+        setToast(`Theme: ${t.name}`);
+        window.setTimeout(() => setToast(null), 800);
       } else if (isClipboard(entry)) {
         await api.executeClipboard(entry.id);
         setToast("Pasted from history");
@@ -791,6 +823,7 @@ function entryKey(e: PaletteEntry): string {
   if (isVite(e)) return `vite:${e.pid}:${e.port}`;
   if (isDocker(e)) return `docker:${e.id}:${e.mode}`;
   if (isFile(e)) return `file:${e.path}`;
+  if (isTheme(e)) return `theme:${e.id}`;
   if (isClipboard(e)) return `clip:${e.id}`;
   return `${e.kind}:${e.id}`;
 }
@@ -816,8 +849,10 @@ function kindPriority(e: PaletteEntry): number {
       return 6;
     case "file":
       return 7;
-    case "clipboard":
+    case "theme":
       return 8;
+    case "clipboard":
+      return 9;
   }
 }
 
@@ -826,6 +861,7 @@ function nameOf(e: PaletteEntry): string {
   if (e.kind === "vite") return e.project;
   if (e.kind === "docker") return e.name;
   if (e.kind === "file") return e.name;
+  if (e.kind === "theme") return e.name;
   if (e.kind === "clipboard") return e.text;
   return (e as { name?: string }).name ?? "";
 }
@@ -865,6 +901,8 @@ function filterLabel(k: PaletteEntry["kind"]): string {
       return "Clipboard";
     case "file":
       return "Files";
+    case "theme":
+      return "Themes";
   }
 }
 
@@ -888,6 +926,8 @@ function placeholderFor(k: KindFilter): string {
       return "Search built-in commands…";
     case "file":
       return "Find files — try :png screenshot, :img :newest, ⌘C path, ⌘R reveal";
+    case "theme":
+      return "Pick a theme — ↵ applies it, drop JSONs in ~/.../davidcast/themes";
     default:
       return "Type to search — snippets, quicklinks, apps, agents, commands…";
   }
@@ -947,6 +987,10 @@ function Row({
     name = oneLine(entry.text) || "(empty)";
     sub = `${entry.char_count} chars · ${relativeTime(entry.copied_at)}`;
     badge = "Clipboard";
+  } else if (isTheme(entry)) {
+    name = entry.name;
+    sub = entry.builtin ? "Built-in" : "Custom (JSON)";
+    badge = "Theme";
   } else if (isFile(entry)) {
     name = entry.name;
     sub = `${entry.parent} · ${formatSize(entry.size)} · ${relativeTime(
@@ -1039,6 +1083,9 @@ function EntryIcon({ entry }: { entry: PaletteEntry }) {
       </div>
     );
   }
+  if (isTheme(entry)) {
+    return <ThemeSwatch theme={entry} />;
+  }
   if (isFile(entry)) {
     if (entry.is_image) {
       return <ImageThumb path={entry.path} fallback={entry.name} />;
@@ -1050,6 +1097,32 @@ function EntryIcon({ entry }: { entry: PaletteEntry }) {
     );
   }
   return <div className="row-icon glyph" />;
+}
+
+// Themes are visualised as a tiny swatch — the row icon shows the theme's
+// own bg + accent so the picker is itself a preview.
+function ThemeSwatch({ theme }: { theme: import("../types").Theme }) {
+  const bg = theme.tokens.bg ?? "#1c1c20";
+  const accent = theme.tokens.accent ?? "#7bd88f";
+  return (
+    <div
+      className="row-icon"
+      style={{
+        background: bg,
+        boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.12)",
+      }}
+    >
+      <span
+        style={{
+          width: 8,
+          height: 8,
+          borderRadius: 4,
+          background: accent,
+          display: "inline-block",
+        }}
+      />
+    </div>
+  );
 }
 
 // Side-panel preview for the screenshot mode. Shows the currently

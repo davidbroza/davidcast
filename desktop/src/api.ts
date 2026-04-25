@@ -130,6 +130,15 @@ export const api = {
   wmMaximize: () => invoke<void>("wm_maximize"),
   wmCenter: () => invoke<void>("wm_center"),
 
+  // Themes
+  listThemes: () => invoke<import("./types").Theme[]>("list_themes"),
+  getActiveTheme: () => invoke<import("./types").Theme>("get_active_theme"),
+  setActiveTheme: (id: string) =>
+    invoke<import("./types").Theme>("set_active_theme", { id }),
+  importTheme: (path: string) =>
+    invoke<import("./types").Theme>("import_theme", { path }),
+  themesDir: () => invoke<string | null>("themes_dir"),
+
   // Clipboard history
   listClipboard: () => invoke<ClipboardEntry[]>("list_clipboard"),
   executeClipboard: (id: string) => invoke<void>("execute_clipboard", { id }),

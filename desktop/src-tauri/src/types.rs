@@ -66,6 +66,14 @@ pub struct Config {
     /// most common redirect target. Stored as resolved absolute paths.
     #[serde(default = "default_screenshot_dirs")]
     pub screenshot_dirs: Vec<String>,
+    /// Active theme id. Matches `themes::Theme::id` — built-in (`default`,
+    /// `light`, `high-contrast`) or any user-imported theme filename.
+    #[serde(default = "default_theme_id")]
+    pub theme: String,
+}
+
+fn default_theme_id() -> String {
+    "default".to_string()
 }
 
 fn default_screenshot_dirs() -> Vec<String> {
@@ -96,6 +104,7 @@ impl Default for Config {
             show_vite_inline: true,
             show_docker_inline: true,
             screenshot_dirs: default_screenshot_dirs(),
+            theme: default_theme_id(),
         }
     }
 }

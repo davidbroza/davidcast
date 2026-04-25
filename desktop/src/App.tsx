@@ -4,7 +4,17 @@ import { api, type Settings } from "./api";
 import { ItemForm } from "./components/ItemForm";
 import { Palette } from "./components/Palette";
 import { WorkspaceSwitcher } from "./components/WorkspaceSwitcher";
-import type { Item, PaletteEntry, Workspace } from "./types";
+import type { Item, PaletteEntry, Theme, Workspace } from "./types";
+
+/// Set CSS variables on the document root from a theme. Mirrors the
+/// `--<name>` shape used in palette.css; everything kept on the root
+/// applies to both the palette and prefs windows in this bundle.
+export function applyTheme(theme: Theme) {
+  const root = document.documentElement;
+  for (const [k, v] of Object.entries(theme.tokens)) {
+    root.style.setProperty(`--${k}`, v);
+  }
+}
 
 export type Session = {
   id: string;
@@ -58,6 +68,12 @@ export default function App() {
   useEffect(() => {
     refresh().catch((e) => setError(String(e)));
   }, [refresh]);
+
+  // Pull and apply the active theme on mount. Failures fall back to the
+  // CSS defaults baked into palette.css.
+  useEffect(() => {
+    api.getActiveTheme().then(applyTheme).catch(() => {});
+  }, []);
 
   useEffect(() => {
     const offShow = listen("palette:show", () => {
@@ -137,6 +153,8 @@ export default function App() {
       case "wm.center":
         api.wmCenter().catch((e) => setError(String(e)));
         break;
+      // "Switch Theme" is handled inline by the Palette via kindFilter.
+      // Nothing for App to do here.
     }
   }
 

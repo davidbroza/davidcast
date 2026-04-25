@@ -10,6 +10,7 @@ mod git;
 mod hotkey;
 mod icons;
 mod store;
+mod themes;
 mod types;
 mod vite_ports;
 mod window_mgmt;
@@ -134,6 +135,11 @@ pub fn run() {
             commands::wm_bottom_half,
             commands::wm_maximize,
             commands::wm_center,
+            commands::list_themes,
+            commands::get_active_theme,
+            commands::set_active_theme,
+            commands::import_theme,
+            commands::themes_dir,
             commands::list_workspaces,
             commands::set_active_workspace,
             commands::create_workspace,
