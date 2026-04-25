@@ -19,8 +19,16 @@ Raycast is great, but its data lives in an encrypted SQLite database you can't s
 | **Global palette** | `⌥ Space` anywhere. Single input, fuzzy search. Always focused. |
 | **Snippets** | Text stored on disk, pasted at cursor (or just copied — Accessibility permission optional). `{placeholder}` args supported. |
 | **Quicklinks** | URL templates with `{arg}` substitution. Open in default browser, Chrome, or Safari. |
-| **App launcher** | Scans `/Applications`, `/System/Applications`, `~/Applications`. Launch anything with a keyword. |
-| **Built-in commands** | "Create Snippet", "Create Quicklink", "Preferences", "Switch Workspace" are searchable like items — type what you want. |
+| **App launcher** | Scans `/Applications`, `/System/Applications`, `~/Applications`. Native macOS icons, launch with a keyword. |
+| **Running Claude CLI agents** | `ps` + `lsof` + ppid climb to find each terminal tab; `↵` jumps back to it. Shows the project's git branch and a dirty marker. |
+| **Vite dev servers** | `lsof` joins listening ports against vite-shaped node processes; `↵` opens the URL in your default browser. |
+| **Docker containers** | `docker ps` in JSON; two rows per container — `↵` opens a shell, type `logs` for `docker logs -f`. iTerm if installed, Terminal otherwise. |
+| **File search** | `fd`-backed live search across configurable roots. Query syntax: `:png`, `:img`, `:newest`. Inline thumbnails for image files. |
+| **Find Screenshots** | Side-preview pane on the right. `↵` copies the path, `⌘⇧C` copies the bitmap, `⌘R` reveals in Finder. Folders configurable in Preferences. |
+| **Clipboard history** | Background watcher; `⌘⇧V` opens the history filter directly. |
+| **Smart ranking** | Empty-query view sorts by recents (24-item localStorage cap) → kind priority → alphabetical. Typed queries get a `-0.4` prefix bonus and `-0.18` recents bonus on top of Fuse's score, so `i` lands on iTerm. |
+| **Local analytics** | Append-only JSONL at `~/Library/Application Support/davidcast/analytics.jsonl` — `open`, `execute` (with kind, success, duration, query, result count), `no_results` (debounced). Local-only, never leaves the box. |
+| **Built-in commands** | "Create Snippet", "Create Quicklink", "Show X" filter chips for Vite / Docker / Agents / Clipboard, "Find Files", "Find Screenshots", "Preferences", "Switch Workspace" — all searchable like items. |
 | **Workspaces** | Isolated namespaces. Personal / work / anything. Each has its own items and (eventually) its own sync target. |
 | **Menu-bar only** | No dock icon. Tray menu for when you've forgotten the hotkey. |
 | **Raycast import** | Paste the path of a Raycast JSON export in Preferences → Import. Handles `{argument name="x"}` → `{x}` and browser bundle IDs. |
@@ -68,10 +76,21 @@ Skipping this is fine — snippets still land on the clipboard, you just `⌘V` 
 | `⌃A` / `⌃E` | Jump query cursor to start / end |
 | `⌘N` | New snippet / quicklink |
 | `⌘E` | Edit the selected item |
-| `⌘⌫` | Delete the selected item |
+| `⌘⌫` | Delete the selected item (two-press confirm) |
 | `⌘K` | Switch workspace |
 | `⌘,` | Open preferences |
-| `esc` | Close palette |
+| `⌘⇧V` | Open palette directly in clipboard history mode |
+| `esc` | Close palette (or pop the active filter chip first) |
+
+**File rows** (Find Files / Find Screenshots)
+
+| Key | Action |
+|---|---|
+| `↵` | For images outside screenshot mode: copy bitmap. Otherwise: open. In screenshot mode: copy path. |
+| `⌘↵` | Force-open in default app (even for images). |
+| `⌘C` | Copy file path. |
+| `⌘⇧C` | Copy image bitmap (when on an image row). |
+| `⌘R` | Reveal in Finder. |
 
 **Create / edit form**
 
@@ -100,6 +119,26 @@ Skipping this is fine — snippets still land on the clipboard, you just `⌘V` 
 **App:**
 
 1. `⌥ Space` → `iterm` → `↵` — launches iTerm
+
+**Vite dev server:**
+
+1. `pnpm dev` in any project (Vite picks a port, e.g. 5173)
+2. `⌥ Space` → type the project name → `↵` opens `http://localhost:5173`
+
+**Docker container:**
+
+1. `⌥ Space` → `docker` → `↵` on "Show Docker Containers" — filters to just containers
+2. Find your container, `↵` shells in. Or type `logs` to find the matching `… · logs` row and tail.
+
+**Find a screenshot fast:**
+
+1. `⌥ Space` → `screenshots` → `↵` on "Find Screenshots"
+2. Arrow through; the right-side preview updates live
+3. `↵` copies the path (paste-ready). `⌘⇧C` if you want the bitmap.
+
+## Releases
+
+Tagging `vX.Y.Z` on `main` triggers `.github/workflows/release.yml` — it builds both Apple Silicon and Intel bundles, generates notes from `git log <prev_tag>..HEAD`, and publishes a GitHub Release with `.app.tar.gz` + `.dmg` artifacts. CI (`cargo check`/`test` + `pnpm build`) runs on every push and PR; green main is the prerequisite for tagging.
 
 ## Architecture
 
