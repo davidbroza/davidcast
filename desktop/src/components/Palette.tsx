@@ -11,10 +11,12 @@ import {
   isClipboard,
   isCommand,
   isDocker,
+  isFile,
   isQuicklink,
   isSnippet,
   isVite,
 } from "../types";
+import type { FileSearchOpts } from "../types";
 
 type KindFilter = PaletteEntry["kind"] | null;
 
@@ -31,6 +33,45 @@ function loadRecents(): Record<string, number> {
   } catch {
     return {};
   }
+}
+
+/// Parse the file-mode query into structured search options.
+///
+/// Supported tokens:
+///   :png / :jpg / :pdf / ...   -> filter by extension
+///   :img | :image              -> any image extension shorthand
+///   :newest                    -> sort by modified time, newest first
+/// Anything else is treated as a name pattern handed to fd.
+function parseFileQuery(input: string): FileSearchOpts {
+  const tokens = input.trim().split(/\s+/).filter(Boolean);
+  const opts: FileSearchOpts = {};
+  const remaining: string[] = [];
+  const extensions: string[] = [];
+  for (const t of tokens) {
+    if (t.startsWith(":")) {
+      const key = t.slice(1).toLowerCase();
+      if (key === "newest") opts.sort_by_mtime = true;
+      else if (key === "img" || key === "image") opts.category = "image";
+      else if (/^[a-z0-9]+$/.test(key)) extensions.push(key);
+    } else {
+      remaining.push(t);
+    }
+  }
+  if (extensions.length) opts.extensions = extensions;
+  const q = remaining.join(" ");
+  if (q) opts.query = q;
+  // Empty query with no other filters = show 50 most recently modified
+  // files so the file mode never opens to a blank screen.
+  if (
+    !q &&
+    extensions.length === 0 &&
+    !opts.category &&
+    !opts.sort_by_mtime
+  ) {
+    opts.sort_by_mtime = true;
+    opts.limit = 50;
+  }
+  return opts;
 }
 
 function touchRecent(key: string) {
@@ -80,6 +121,7 @@ export function Palette({
   const [pendingDelete, setPendingDelete] = useState<Item | null>(null);
   const [kindFilter, setKindFilter] = useState<KindFilter>(initialFilter ?? null);
   const [clipboardEntries, setClipboardEntries] = useState<PaletteEntry[]>([]);
+  const [fileEntries, setFileEntries] = useState<PaletteEntry[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const deleteTimer = useRef<number | null>(null);
@@ -109,8 +151,31 @@ export function Palette({
     };
   }, [kindFilter, onError]);
 
+  // File search runs via the backend on every keystroke (debounced 200ms).
+  // Empty query in file mode falls back to "newest 50" so the user sees
+  // something useful immediately.
+  useEffect(() => {
+    if (kindFilter !== "file") return;
+    const opts = parseFileQuery(query);
+    let cancelled = false;
+    const handle = window.setTimeout(() => {
+      api
+        .searchFiles(opts)
+        .then((rows) => {
+          if (cancelled) return;
+          setFileEntries(rows.map((r) => ({ kind: "file" as const, ...r })));
+        })
+        .catch((e) => onError(String(e)));
+    }, 200);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(handle);
+    };
+  }, [query, kindFilter, onError]);
+
   const visibleEntries = useMemo(() => {
     if (kindFilter === "clipboard") return clipboardEntries;
+    if (kindFilter === "file") return fileEntries;
     if (kindFilter) return entries.filter((e) => e.kind === kindFilter);
     // Unfiltered view: respect inline-display settings. Vite/Docker entries
     // are still reachable via "Show Vite Ports" / "Show Docker Containers"
@@ -120,7 +185,7 @@ export function Palette({
       if (e.kind === "docker" && !settings.show_docker_inline) return false;
       return true;
     });
-  }, [entries, clipboardEntries, kindFilter, settings]);
+  }, [entries, clipboardEntries, fileEntries, kindFilter, settings]);
 
   const fuse = useMemo(
     () =>
@@ -146,17 +211,25 @@ export function Palette({
   );
 
   const filtered = useMemo(() => {
+    // File mode is fully resolved by the backend (fd does the matching);
+    // skip Fuse entirely so we don't filter the results twice.
+    if (kindFilter === "file") return visibleEntries;
     const q = query.trim();
     if (!q) {
-      // Empty query: float recently-used items to the top, newest first,
-      // then keep the rest in their original (kind-priority) order.
+      // Empty query order:
+      //   1) recents — what you actually use, newest first
+      //   2) kind priority — apps > your items > plugins > clipboard
+      //   3) alphabetical name — predictable tiebreaker
       const recents = loadRecents();
       const ranked = [...visibleEntries];
       ranked.sort((a, b) => {
         const ra = recents[entryKey(a)] ?? 0;
         const rb = recents[entryKey(b)] ?? 0;
         if (ra !== rb) return rb - ra;
-        return 0;
+        const pa = kindPriority(a);
+        const pb = kindPriority(b);
+        if (pa !== pb) return pa - pb;
+        return nameOf(a).localeCompare(nameOf(b));
       });
       return ranked;
     }
@@ -187,7 +260,7 @@ export function Palette({
       return nameOf(a.item).localeCompare(nameOf(b.item));
     });
     return scored.map((r) => r.item);
-  }, [query, fuse, visibleEntries]);
+  }, [query, fuse, visibleEntries, kindFilter]);
 
   useEffect(() => {
     setSelected(0);
@@ -204,18 +277,34 @@ export function Palette({
     inputRef.current?.focus();
   }, []);
 
+  // Refocus the input every time the palette window regains focus. The
+  // component stays mounted across hide/show cycles, so the mount-only
+  // focus above isn't enough — without this you'd have to click the input
+  // before typing on the second open.
+  useEffect(() => {
+    const onFocus = () => inputRef.current?.focus();
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+  }, []);
+
   // Clear state when the palette window loses focus (i.e. *before* the next
   // open). Doing this on `palette:show` would flash the old text for a frame;
   // doing it on blur means the next open paints blank from the start.
+  //
+  // Always reset to the full palette — `initialFilter` is the *intent* of
+  // the most recent open (e.g. ⌘⇧V wants clipboard mode), but the next open
+  // will set it again via App's `palette:show` listener if it cares. Without
+  // this, a stale filter from a previous session lingers and your most-used
+  // items vanish until you hit Escape.
   useEffect(() => {
     const onBlur = () => {
       setQuery("");
       setSelected(0);
-      setKindFilter(initialFilter ?? null);
+      setKindFilter(null);
     };
     window.addEventListener("blur", onBlur);
     return () => window.removeEventListener("blur", onBlur);
-  }, [initialFilter]);
+  }, []);
 
   // No-results detection: when the user has typed something but nothing
   // matched, debounce 600ms and log it once. Reset whenever query changes.
@@ -285,6 +374,14 @@ export function Palette({
             setQuery("");
             setKindFilter("clipboard");
             break;
+          case "files.find":
+            setQuery("");
+            setKindFilter("file");
+            break;
+          case "files.screenshots":
+            setQuery(":img :newest screenshot");
+            setKindFilter("file");
+            break;
           default:
             // Non-filter commands ("Create Snippet", "Open Preferences", …)
             // bubble up to App; mark as a real execution.
@@ -332,6 +429,14 @@ export function Palette({
         await api.executeClipboard(entry.id);
         setToast("Pasted from history");
         window.setTimeout(() => setToast(null), 800);
+      } else if (isFile(entry)) {
+        if (entry.is_image) {
+          await api.copyFileImage(entry.path);
+          setToast("Image copied to clipboard");
+          window.setTimeout(() => setToast(null), 1100);
+        } else {
+          await api.openFile(entry.path);
+        }
       }
     } catch (e) {
       success = false;
@@ -388,7 +493,38 @@ export function Palette({
     if (e.key === "Enter") {
       e.preventDefault();
       const entry = filtered[selected];
-      if (entry) execute(entry);
+      if (!entry) return;
+      // ⌘↵ on a file forces "open" even for images (whose default action
+      // would otherwise copy the bitmap to the clipboard).
+      if (cmd && isFile(entry)) {
+        api
+          .openFile(entry.path)
+          .catch((err) => onError(String(err)));
+        return;
+      }
+      execute(entry);
+      return;
+    }
+
+    // File-row shortcuts: copy path / reveal in Finder.
+    const fileEntry = (() => {
+      const entry = filtered[selected];
+      return entry && isFile(entry) ? entry : null;
+    })();
+    if (cmd && fileEntry && (e.key === "c" || e.key === "C")) {
+      e.preventDefault();
+      api
+        .copyFilePath(fileEntry.path)
+        .then(() => {
+          setToast("Path copied");
+          window.setTimeout(() => setToast(null), 700);
+        })
+        .catch((err) => onError(String(err)));
+      return;
+    }
+    if (cmd && fileEntry && (e.key === "r" || e.key === "R")) {
+      e.preventDefault();
+      api.revealFile(fileEntry.path).catch((err) => onError(String(err)));
       return;
     }
     if (e.key === "Escape") {
@@ -569,28 +705,34 @@ function entryKey(e: PaletteEntry): string {
   if (isAgent(e)) return `agent:${e.pid}`;
   if (isVite(e)) return `vite:${e.pid}:${e.port}`;
   if (isDocker(e)) return `docker:${e.id}:${e.mode}`;
+  if (isFile(e)) return `file:${e.path}`;
   if (isClipboard(e)) return `clip:${e.id}`;
   return `${e.kind}:${e.id}`;
 }
 
 function kindPriority(e: PaletteEntry): number {
+  // Order chosen so the things you type and pick most often surface first.
+  // Apps are by far the most-used kind ("iterm", "chrome"…), then your
+  // own quicklinks/snippets, then the live system plugins.
   switch (e.kind) {
     case "command":
       return 0;
-    case "agent":
-      return 1;
-    case "vite":
-      return 2;
-    case "docker":
-      return 3;
-    case "snippet":
-      return 4;
-    case "quicklink":
-      return 5;
-    case "clipboard":
-      return 6;
     case "app":
+      return 1;
+    case "quicklink":
+      return 2;
+    case "snippet":
+      return 3;
+    case "agent":
+      return 4;
+    case "vite":
+      return 5;
+    case "docker":
+      return 6;
+    case "file":
       return 7;
+    case "clipboard":
+      return 8;
   }
 }
 
@@ -598,6 +740,7 @@ function nameOf(e: PaletteEntry): string {
   if (e.kind === "agent") return e.project;
   if (e.kind === "vite") return e.project;
   if (e.kind === "docker") return e.name;
+  if (e.kind === "file") return e.name;
   if (e.kind === "clipboard") return e.text;
   return (e as { name?: string }).name ?? "";
 }
@@ -635,6 +778,8 @@ function filterLabel(k: PaletteEntry["kind"]): string {
       return "Commands";
     case "clipboard":
       return "Clipboard";
+    case "file":
+      return "Files";
   }
 }
 
@@ -656,6 +801,8 @@ function placeholderFor(k: KindFilter): string {
       return "Search applications…";
     case "command":
       return "Search built-in commands…";
+    case "file":
+      return "Find files — try :png screenshot, :img :newest, ⌘C path, ⌘R reveal";
     default:
       return "Type to search — snippets, quicklinks, apps, agents, commands…";
   }
@@ -715,6 +862,16 @@ function Row({
     name = oneLine(entry.text) || "(empty)";
     sub = `${entry.char_count} chars · ${relativeTime(entry.copied_at)}`;
     badge = "Clipboard";
+  } else if (isFile(entry)) {
+    name = entry.name;
+    sub = `${entry.parent} · ${formatSize(entry.size)} · ${relativeTime(
+      new Date(entry.modified_at).toISOString()
+    )}`;
+    badge = entry.is_image
+      ? "Image"
+      : entry.ext
+      ? entry.ext.toUpperCase()
+      : "File";
   }
 
   const keyword =
@@ -797,7 +954,60 @@ function EntryIcon({ entry }: { entry: PaletteEntry }) {
       </div>
     );
   }
+  if (isFile(entry)) {
+    if (entry.is_image) {
+      return <ImageThumb path={entry.path} fallback={entry.name} />;
+    }
+    return (
+      <div className="row-icon glyph file">
+        <FileGlyph />
+      </div>
+    );
+  }
   return <div className="row-icon glyph" />;
+}
+
+// Lazy thumbnail loader for image files. Mirrors the AppIcon cache so we
+// only round-trip to Rust once per path; failures stick (no infinite retry).
+const THUMB_CACHE = new Map<string, string | null>();
+
+function ImageThumb({ path, fallback }: { path: string; fallback: string }) {
+  const [src, setSrc] = useState<string | null>(() => THUMB_CACHE.get(path) ?? null);
+  const [tried, setTried] = useState(THUMB_CACHE.has(path));
+
+  useEffect(() => {
+    if (tried) return;
+    let cancelled = false;
+    api
+      .fileThumbnail(path)
+      .then((url) => {
+        if (cancelled) return;
+        THUMB_CACHE.set(path, url);
+        setSrc(url);
+        setTried(true);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        THUMB_CACHE.set(path, null);
+        setTried(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [path, tried]);
+
+  if (src) {
+    return (
+      <div className="row-icon app-icon">
+        <img src={src} alt="" draggable={false} />
+      </div>
+    );
+  }
+  return (
+    <div className="row-icon app app-fallback">
+      {fallback.charAt(0).toUpperCase()}
+    </div>
+  );
 }
 
 // In-memory cache so re-renders don't re-fetch — and so failures don't retry forever.
@@ -932,6 +1142,20 @@ function LogsGlyph() {
     </svg>
   );
 }
+function FileGlyph() {
+  // Sheet of paper with a folded corner.
+  return (
+    <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+      <path
+        d="M3.5 2.5 L9 2.5 L12.5 6 L12.5 13.5 L3.5 13.5 Z M9 2.5 L9 6 L12.5 6"
+        stroke="currentColor"
+        strokeWidth="1.3"
+        strokeLinejoin="round"
+        fill="none"
+      />
+    </svg>
+  );
+}
 function ClipboardGlyph() {
   return (
     <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
@@ -950,6 +1174,16 @@ function ClipboardGlyph() {
 function oneLine(t: string): string {
   const s = t.replace(/\s+/g, " ").trim();
   return s.length > 80 ? s.slice(0, 77) + "…" : s;
+}
+
+function formatSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  const kb = bytes / 1024;
+  if (kb < 1024) return `${kb.toFixed(0)} KB`;
+  const mb = kb / 1024;
+  if (mb < 1024) return `${mb.toFixed(1)} MB`;
+  const gb = mb / 1024;
+  return `${gb.toFixed(1)} GB`;
 }
 
 function relativeTime(iso: string): string {

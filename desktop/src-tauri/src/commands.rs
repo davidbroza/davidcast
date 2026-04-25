@@ -4,6 +4,7 @@ use crate::analytics;
 use crate::apps::{self, AppEntry};
 use crate::clipboard::{self, ClipboardEntry};
 use crate::docker_ps::{self, DockerEntry};
+use crate::files::{self, FileEntry, FileSearchOpts};
 use crate::icons;
 use crate::store::Store;
 use crate::types::*;
@@ -77,6 +78,54 @@ pub fn set_show_docker_inline(value: bool, store: StoreState<'_>) -> Result<(), 
     let mut s = store.write();
     s.config.show_docker_inline = value;
     s.save_config().map_err(|e| e.to_string())
+}
+
+// ---------- File search ----------
+
+#[tauri::command]
+pub fn search_files(opts: FileSearchOpts) -> Vec<FileEntry> {
+    files::search(opts)
+}
+
+#[tauri::command]
+pub fn open_file(path: String, app: AppHandle) -> Result<(), String> {
+    use tauri::Manager;
+    if let Some(w) = app.get_webview_window("main") {
+        let _ = w.hide();
+    }
+    files::open_in_default_app(&path)
+}
+
+#[tauri::command]
+pub fn reveal_file(path: String, app: AppHandle) -> Result<(), String> {
+    use tauri::Manager;
+    if let Some(w) = app.get_webview_window("main") {
+        let _ = w.hide();
+    }
+    files::reveal_in_finder(&path)
+}
+
+#[tauri::command]
+pub fn copy_file_path(path: String, app: AppHandle) -> Result<(), String> {
+    use tauri::Manager;
+    if let Some(w) = app.get_webview_window("main") {
+        let _ = w.hide();
+    }
+    files::copy_path_to_clipboard(&path)
+}
+
+#[tauri::command]
+pub fn copy_file_image(path: String, app: AppHandle) -> Result<(), String> {
+    use tauri::Manager;
+    if let Some(w) = app.get_webview_window("main") {
+        let _ = w.hide();
+    }
+    files::copy_image_to_clipboard(&path)
+}
+
+#[tauri::command]
+pub fn file_thumbnail(path: String) -> Option<String> {
+    files::thumbnail_data_url(&path)
 }
 
 // ---------- Analytics ----------
@@ -273,6 +322,16 @@ fn builtin_commands() -> Vec<CommandEntry> {
             id: "show.docker".into(),
             name: "Show Docker Containers".into(),
             subtitle: "Running containers — shell in or follow logs".into(),
+        },
+        CommandEntry {
+            id: "files.find".into(),
+            name: "Find Files".into(),
+            subtitle: "fd-backed search — :png, :img, :newest filters".into(),
+        },
+        CommandEntry {
+            id: "files.screenshots".into(),
+            name: "Find Screenshots".into(),
+            subtitle: "Most recent images on Desktop & Pictures".into(),
         },
         CommandEntry {
             id: "open.preferences".into(),

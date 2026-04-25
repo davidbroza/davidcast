@@ -218,6 +218,10 @@ body[data-view="palette"] {
   background: linear-gradient(135deg, #5a708a, #364658);
   color: #d8e4f0;
 }
+.row-icon.glyph.file {
+  background: linear-gradient(135deg, #6e7686, #3e4452);
+  color: #e8e8ea;
+}
 .row-icon.app-icon {
   background: transparent;
   box-shadow: none;

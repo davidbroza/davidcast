@@ -83,6 +83,25 @@ export interface DockerEntry {
   mode: "shell" | "logs";
 }
 
+export interface FileEntry {
+  path: string;
+  name: string;
+  parent: string;
+  size: number;
+  modified_at: number;
+  is_image: boolean;
+  ext: string;
+}
+
+export interface FileSearchOpts {
+  query?: string;
+  extensions?: string[];
+  category?: string;
+  roots?: string[];
+  sort_by_mtime?: boolean;
+  limit?: number;
+}
+
 export interface ClipboardEntry {
   id: string;
   text: string;
@@ -102,6 +121,7 @@ export type PaletteEntry =
   | ({ kind: "agent" } & AgentEntry)
   | ({ kind: "vite" } & VitePortEntry)
   | ({ kind: "docker" } & DockerEntry)
+  | ({ kind: "file" } & FileEntry)
   | ({ kind: "clipboard" } & ClipboardEntry);
 
 export function isSnippet(i: Item | PaletteEntry): i is { kind: "snippet" } & Snippet {
@@ -132,6 +152,10 @@ export function isDocker(
   i: PaletteEntry
 ): i is { kind: "docker" } & DockerEntry {
   return i.kind === "docker";
+}
+
+export function isFile(i: PaletteEntry): i is { kind: "file" } & FileEntry {
+  return i.kind === "file";
 }
 
 export function isClipboard(

@@ -107,6 +107,16 @@ export const api = {
   getAppIcon: (path: string) =>
     invoke<string | null>("get_app_icon", { path }),
 
+  // File search
+  searchFiles: (opts: import("./types").FileSearchOpts) =>
+    invoke<import("./types").FileEntry[]>("search_files", { opts }),
+  openFile: (path: string) => invoke<void>("open_file", { path }),
+  revealFile: (path: string) => invoke<void>("reveal_file", { path }),
+  copyFilePath: (path: string) => invoke<void>("copy_file_path", { path }),
+  copyFileImage: (path: string) => invoke<void>("copy_file_image", { path }),
+  fileThumbnail: (path: string) =>
+    invoke<string | null>("file_thumbnail", { path }),
+
   // Clipboard history
   listClipboard: () => invoke<ClipboardEntry[]>("list_clipboard"),
   executeClipboard: (id: string) => invoke<void>("execute_clipboard", { id }),

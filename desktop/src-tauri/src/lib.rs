@@ -5,6 +5,7 @@ mod apps;
 mod clipboard;
 mod commands;
 mod docker_ps;
+mod files;
 mod git;
 mod hotkey;
 mod icons;
@@ -118,6 +119,12 @@ pub fn run() {
             commands::analytics_tail,
             commands::analytics_clear,
             commands::analytics_log_path,
+            commands::search_files,
+            commands::open_file,
+            commands::reveal_file,
+            commands::copy_file_path,
+            commands::copy_file_image,
+            commands::file_thumbnail,
             commands::list_workspaces,
             commands::set_active_workspace,
             commands::create_workspace,
