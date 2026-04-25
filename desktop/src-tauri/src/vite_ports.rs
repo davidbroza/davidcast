@@ -1,3 +1,4 @@
+use crate::git::{self, GitInfo};
 use serde::Serialize;
 
 /// One running Vite dev server (one entry per (pid, listening port) pair).
@@ -11,6 +12,7 @@ pub struct VitePortEntry {
     pub project: String,
     pub command: String,
     pub elapsed: String,
+    pub git: GitInfo,
 }
 
 pub fn list_vite_ports() -> Vec<VitePortEntry> {
@@ -28,6 +30,8 @@ pub fn list_vite_ports() -> Vec<VitePortEntry> {
             .and_then(|s| s.to_str())
             .unwrap_or(&cwd)
             .to_string();
+        // One git lookup per process — listeners on the same pid share it.
+        let git_info = git::info_at(std::path::Path::new(&cwd));
         for l in listeners.iter().filter(|l| l.pid == p.pid) {
             let host = if l.addr == "*" || l.addr == "0.0.0.0" || l.addr == "127.0.0.1" {
                 "localhost".to_string()
@@ -43,6 +47,7 @@ pub fn list_vite_ports() -> Vec<VitePortEntry> {
                 project: project.clone(),
                 command: p.args.clone(),
                 elapsed: p.etime.clone(),
+                git: git_info.clone(),
             });
         }
     }

@@ -5,6 +5,7 @@ mod apps;
 mod clipboard;
 mod commands;
 mod docker_ps;
+mod git;
 mod hotkey;
 mod icons;
 mod store;

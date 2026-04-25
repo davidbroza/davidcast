@@ -594,6 +594,14 @@ function shortName(e: PaletteEntry): string {
   return n.length > 80 ? n.slice(0, 77) + "…" : n;
 }
 
+/// Render the git context for a row's subtitle: ` · main` or ` · main*`
+/// for a dirty tree, empty string for non-repos. Detached HEAD shows up
+/// with no branch name, so we skip it.
+function gitFragment(g: import("../types").GitInfo | undefined): string {
+  if (!g || !g.is_repo || !g.branch) return "";
+  return ` · ${g.branch}${g.dirty ? "*" : ""}`;
+}
+
 function filterLabel(k: PaletteEntry["kind"]): string {
   switch (k) {
     case "agent":
@@ -673,11 +681,11 @@ function Row({
     badge = "Quicklink";
   } else if (isAgent(entry)) {
     name = entry.project || "unknown project";
-    sub = `${entry.cwd} · ${entry.terminal_app} · ${entry.elapsed}`;
+    sub = `${entry.cwd}${gitFragment(entry.git)} · ${entry.terminal_app} · ${entry.elapsed}`;
     badge = "Agent";
   } else if (isVite(entry)) {
     name = `${entry.project} · :${entry.port}`;
-    sub = `${entry.url} · ${entry.cwd} · ${entry.elapsed}`;
+    sub = `${entry.url}${gitFragment(entry.git)} · ${entry.cwd} · ${entry.elapsed}`;
     badge = "Vite";
   } else if (isDocker(entry)) {
     name =

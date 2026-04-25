@@ -386,6 +386,7 @@ pub fn execute_agent(
         project: String::new(),
         command: String::new(),
         elapsed: String::new(),
+        git: Default::default(),
     };
     std::thread::sleep(std::time::Duration::from_millis(60));
     agents::activate(&entry)

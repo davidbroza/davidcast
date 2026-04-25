@@ -45,6 +45,12 @@ export interface CommandEntry {
   subtitle: string;
 }
 
+export interface GitInfo {
+  is_repo: boolean;
+  branch: string | null;
+  dirty: boolean;
+}
+
 export interface AgentEntry {
   pid: number;
   cwd: string;
@@ -53,6 +59,7 @@ export interface AgentEntry {
   command: string;
   elapsed: string;
   terminal_app: string;
+  git: GitInfo;
 }
 
 export interface VitePortEntry {
@@ -64,6 +71,7 @@ export interface VitePortEntry {
   project: string;
   command: string;
   elapsed: string;
+  git: GitInfo;
 }
 
 export interface DockerEntry {

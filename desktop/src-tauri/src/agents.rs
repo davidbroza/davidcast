@@ -1,3 +1,4 @@
+use crate::git::{self, GitInfo};
 use serde::Serialize;
 use std::collections::HashMap;
 
@@ -10,6 +11,7 @@ pub struct AgentEntry {
     pub command: String,
     pub elapsed: String,
     pub terminal_app: String,
+    pub git: GitInfo,
 }
 
 pub fn list_agents() -> Vec<AgentEntry> {
@@ -33,6 +35,7 @@ pub fn list_agents() -> Vec<AgentEntry> {
             format!("/dev/{}", p.tty)
         };
         let terminal_app = climb_to_terminal(&by_pid, p.pid);
+        let git_info = git::info_at(std::path::Path::new(&cwd));
         out.push(AgentEntry {
             pid: p.pid,
             cwd,
@@ -41,6 +44,7 @@ pub fn list_agents() -> Vec<AgentEntry> {
             command: p.args.clone(),
             elapsed: p.etime.clone(),
             terminal_app,
+            git: git_info,
         });
     }
     // Most recently started first.
