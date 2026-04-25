@@ -12,6 +12,7 @@ mod icons;
 mod store;
 mod types;
 mod vite_ports;
+mod window_mgmt;
 
 use parking_lot::RwLock;
 use tauri::{
@@ -127,6 +128,12 @@ pub fn run() {
             commands::copy_file_path,
             commands::copy_file_image,
             commands::file_thumbnail,
+            commands::wm_left_half,
+            commands::wm_right_half,
+            commands::wm_top_half,
+            commands::wm_bottom_half,
+            commands::wm_maximize,
+            commands::wm_center,
             commands::list_workspaces,
             commands::set_active_workspace,
             commands::create_workspace,

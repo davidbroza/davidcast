@@ -122,6 +122,14 @@ export const api = {
   fileThumbnail: (path: string) =>
     invoke<string | null>("file_thumbnail", { path }),
 
+  // Window management — operate on the frontmost (non-davidcast) window.
+  wmLeftHalf: () => invoke<void>("wm_left_half"),
+  wmRightHalf: () => invoke<void>("wm_right_half"),
+  wmTopHalf: () => invoke<void>("wm_top_half"),
+  wmBottomHalf: () => invoke<void>("wm_bottom_half"),
+  wmMaximize: () => invoke<void>("wm_maximize"),
+  wmCenter: () => invoke<void>("wm_center"),
+
   // Clipboard history
   listClipboard: () => invoke<ClipboardEntry[]>("list_clipboard"),
   executeClipboard: (id: string) => invoke<void>("execute_clipboard", { id }),

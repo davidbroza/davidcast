@@ -117,6 +117,26 @@ export default function App() {
       case "switch.workspace":
         setView({ kind: "workspace-switcher" });
         break;
+      // Window management — these dispatch through Tauri so they all share
+      // the same hide-palette + 60ms grace + osascript pattern.
+      case "wm.left":
+        api.wmLeftHalf().catch((e) => setError(String(e)));
+        break;
+      case "wm.right":
+        api.wmRightHalf().catch((e) => setError(String(e)));
+        break;
+      case "wm.top":
+        api.wmTopHalf().catch((e) => setError(String(e)));
+        break;
+      case "wm.bottom":
+        api.wmBottomHalf().catch((e) => setError(String(e)));
+        break;
+      case "wm.maximize":
+        api.wmMaximize().catch((e) => setError(String(e)));
+        break;
+      case "wm.center":
+        api.wmCenter().catch((e) => setError(String(e)));
+        break;
     }
   }
 

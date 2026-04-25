@@ -9,6 +9,7 @@ use crate::icons;
 use crate::store::Store;
 use crate::types::*;
 use crate::vite_ports::{self, VitePortEntry};
+use crate::window_mgmt;
 use chrono::Utc;
 use parking_lot::RwLock;
 use std::collections::HashMap;
@@ -151,6 +152,52 @@ pub fn copy_file_image(path: String, app: AppHandle) -> Result<(), String> {
 #[tauri::command]
 pub fn file_thumbnail(path: String) -> Option<String> {
     files::thumbnail_data_url(&path)
+}
+
+// ---------- Window management ----------
+//
+// Each command hides the palette (so focus returns to the previous app),
+// waits a beat for the OS to follow through, then runs an osascript that
+// repositions the now-frontmost window. The 60ms sleep is the same trick
+// agents.rs uses for terminal activation.
+
+fn run_wm<F: FnOnce() -> Result<(), String>>(app: &AppHandle, op: F) -> Result<(), String> {
+    use tauri::Manager;
+    if let Some(w) = app.get_webview_window("main") {
+        let _ = w.hide();
+    }
+    std::thread::sleep(std::time::Duration::from_millis(60));
+    op()
+}
+
+#[tauri::command]
+pub fn wm_left_half(app: AppHandle) -> Result<(), String> {
+    run_wm(&app, window_mgmt::left_half)
+}
+
+#[tauri::command]
+pub fn wm_right_half(app: AppHandle) -> Result<(), String> {
+    run_wm(&app, window_mgmt::right_half)
+}
+
+#[tauri::command]
+pub fn wm_top_half(app: AppHandle) -> Result<(), String> {
+    run_wm(&app, window_mgmt::top_half)
+}
+
+#[tauri::command]
+pub fn wm_bottom_half(app: AppHandle) -> Result<(), String> {
+    run_wm(&app, window_mgmt::bottom_half)
+}
+
+#[tauri::command]
+pub fn wm_maximize(app: AppHandle) -> Result<(), String> {
+    run_wm(&app, window_mgmt::maximize)
+}
+
+#[tauri::command]
+pub fn wm_center(app: AppHandle) -> Result<(), String> {
+    run_wm(&app, window_mgmt::center)
 }
 
 // ---------- Analytics ----------
@@ -357,6 +404,36 @@ fn builtin_commands() -> Vec<CommandEntry> {
             id: "files.screenshots".into(),
             name: "Find Screenshots".into(),
             subtitle: "Most recent images on Desktop & Pictures".into(),
+        },
+        CommandEntry {
+            id: "wm.left".into(),
+            name: "Window: Left Half".into(),
+            subtitle: "Resize the frontmost window to the left half".into(),
+        },
+        CommandEntry {
+            id: "wm.right".into(),
+            name: "Window: Right Half".into(),
+            subtitle: "Resize the frontmost window to the right half".into(),
+        },
+        CommandEntry {
+            id: "wm.top".into(),
+            name: "Window: Top Half".into(),
+            subtitle: "Resize the frontmost window to the top half".into(),
+        },
+        CommandEntry {
+            id: "wm.bottom".into(),
+            name: "Window: Bottom Half".into(),
+            subtitle: "Resize the frontmost window to the bottom half".into(),
+        },
+        CommandEntry {
+            id: "wm.maximize".into(),
+            name: "Window: Maximize".into(),
+            subtitle: "Fill the visible desktop".into(),
+        },
+        CommandEntry {
+            id: "wm.center".into(),
+            name: "Window: Center".into(),
+            subtitle: "Two-thirds size, centred".into(),
         },
         CommandEntry {
             id: "open.preferences".into(),
