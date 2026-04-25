@@ -222,6 +222,79 @@ body[data-view="palette"] {
   background: linear-gradient(135deg, #6e7686, #3e4452);
   color: #e8e8ea;
 }
+
+/* ---- Screenshot preview pane (Find Screenshots mode) ---- */
+
+.palette.with-preview {
+  display: grid;
+  grid-template-columns: 1fr 320px;
+  grid-template-rows: auto auto 1fr auto;
+  grid-template-areas:
+    "topbar  preview"
+    "search  preview"
+    "results preview"
+    "footer  preview";
+}
+.palette.with-preview .topbar { grid-area: topbar; }
+.palette.with-preview .search { grid-area: search; }
+.palette.with-preview .results { grid-area: results; }
+.palette.with-preview .footer { grid-area: footer; }
+
+.preview-pane {
+  grid-area: preview;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border-left: 1px solid var(--border);
+  overflow: hidden;
+}
+.preview-image {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.35);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.preview-image img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  -webkit-user-drag: none;
+}
+.preview-fallback {
+  color: var(--fg-dim);
+  font-size: 36px;
+  font-weight: 200;
+}
+.preview-empty {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--fg-faint);
+  font-size: 12px;
+}
+.preview-meta {
+  font-size: 11px;
+  color: var(--fg-dim);
+}
+.preview-name {
+  color: var(--fg);
+  font-size: 13px;
+  margin-bottom: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.preview-sub {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .row-icon.app-icon {
   background: transparent;
   box-shadow: none;

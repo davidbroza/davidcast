@@ -36,6 +36,7 @@ export default function App() {
   const [settings, setSettings] = useState<Settings>({
     show_vite_inline: true,
     show_docker_inline: true,
+    screenshot_dirs: [],
   });
   const [view, setView] = useState<View>({ kind: "palette" });
   const [error, setError] = useState<string | null>(null);

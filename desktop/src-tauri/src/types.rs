@@ -61,6 +61,23 @@ pub struct Config {
     /// Same idea for Docker containers.
     #[serde(default = "default_true")]
     pub show_docker_inline: bool,
+    /// Folders the "Find Screenshots" command scans, newest-mtime first.
+    /// `~/Desktop` is the macOS default; `~/Pictures/Screenshots` is the
+    /// most common redirect target. Stored as resolved absolute paths.
+    #[serde(default = "default_screenshot_dirs")]
+    pub screenshot_dirs: Vec<String>,
+}
+
+fn default_screenshot_dirs() -> Vec<String> {
+    let Some(home) = dirs::home_dir() else {
+        return Vec::new();
+    };
+    let mut out = vec![home.join("Desktop").to_string_lossy().into_owned()];
+    let pics = home.join("Pictures").join("Screenshots");
+    if pics.exists() {
+        out.push(pics.to_string_lossy().into_owned());
+    }
+    out
 }
 
 fn default_true() -> bool {
@@ -78,6 +95,7 @@ impl Default for Config {
             }],
             show_vite_inline: true,
             show_docker_inline: true,
+            screenshot_dirs: default_screenshot_dirs(),
         }
     }
 }

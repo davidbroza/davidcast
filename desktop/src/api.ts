@@ -13,6 +13,7 @@ import type {
 export interface Settings {
   show_vite_inline: boolean;
   show_docker_inline: boolean;
+  screenshot_dirs: string[];
 }
 
 export const api = {
@@ -22,6 +23,10 @@ export const api = {
     invoke<void>("set_show_vite_inline", { value }),
   setShowDockerInline: (value: boolean) =>
     invoke<void>("set_show_docker_inline", { value }),
+  setScreenshotDirs: (value: string[]) =>
+    invoke<void>("set_screenshot_dirs", { value }),
+  searchScreenshots: (limit?: number) =>
+    invoke<import("./types").FileEntry[]>("search_screenshots", { limit }),
 
   // Analytics — local-only, fire-and-forget JSONL append.
   analyticsRecord: (sessionId: string, kind: string, data: unknown) =>

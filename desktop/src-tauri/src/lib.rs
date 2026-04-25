@@ -115,6 +115,8 @@ pub fn run() {
             commands::get_settings,
             commands::set_show_vite_inline,
             commands::set_show_docker_inline,
+            commands::set_screenshot_dirs,
+            commands::search_screenshots,
             commands::analytics_record,
             commands::analytics_tail,
             commands::analytics_clear,

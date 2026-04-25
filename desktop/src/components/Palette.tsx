@@ -122,9 +122,15 @@ export function Palette({
   const [kindFilter, setKindFilter] = useState<KindFilter>(initialFilter ?? null);
   const [clipboardEntries, setClipboardEntries] = useState<PaletteEntry[]>([]);
   const [fileEntries, setFileEntries] = useState<PaletteEntry[]>([]);
+  const [screenshotMode, setScreenshotMode] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const deleteTimer = useRef<number | null>(null);
+  // Tracks whether the most recent input was the mouse. Keyboard nav flips
+  // this to false; the next real mousemove flips it back to true. Without
+  // this, scrolling the list under a stationary cursor fires onMouseEnter
+  // on whatever row landed under the pointer and yanks the selection back.
+  const mouseActiveRef = useRef(true);
 
   const active = workspaces.find((w) => w.id === activeWorkspaceId);
 
@@ -153,14 +159,16 @@ export function Palette({
 
   // File search runs via the backend on every keystroke (debounced 200ms).
   // Empty query in file mode falls back to "newest 50" so the user sees
-  // something useful immediately.
+  // something useful immediately. Screenshot mode uses a dedicated query
+  // path (uses screenshot_dirs from settings, sorted by mtime).
   useEffect(() => {
     if (kindFilter !== "file") return;
-    const opts = parseFileQuery(query);
     let cancelled = false;
     const handle = window.setTimeout(() => {
-      api
-        .searchFiles(opts)
+      const fetcher = screenshotMode
+        ? api.searchScreenshots(50)
+        : api.searchFiles(parseFileQuery(query));
+      fetcher
         .then((rows) => {
           if (cancelled) return;
           setFileEntries(rows.map((r) => ({ kind: "file" as const, ...r })));
@@ -171,7 +179,12 @@ export function Palette({
       cancelled = true;
       window.clearTimeout(handle);
     };
-  }, [query, kindFilter, onError]);
+  }, [query, kindFilter, screenshotMode, onError]);
+
+  // Leaving file mode (e.g. Escape, blur) drops the screenshot flag.
+  useEffect(() => {
+    if (kindFilter !== "file") setScreenshotMode(false);
+  }, [kindFilter]);
 
   const visibleEntries = useMemo(() => {
     if (kindFilter === "clipboard") return clipboardEntries;
@@ -287,6 +300,16 @@ export function Palette({
     return () => window.removeEventListener("focus", onFocus);
   }, []);
 
+  // Real mouse motion — distinguishes "user is actively pointing" from
+  // "list scrolled under a stationary cursor and accidentally re-hovered".
+  useEffect(() => {
+    const onMove = () => {
+      mouseActiveRef.current = true;
+    };
+    document.addEventListener("mousemove", onMove);
+    return () => document.removeEventListener("mousemove", onMove);
+  }, []);
+
   // Clear state when the palette window loses focus (i.e. *before* the next
   // open). Doing this on `palette:show` would flash the old text for a frame;
   // doing it on blur means the next open paints blank from the start.
@@ -379,8 +402,20 @@ export function Palette({
             setKindFilter("file");
             break;
           case "files.screenshots":
-            setQuery(":img :newest screenshot");
+            // Dedicated mode: scans the user-configured screenshot dirs
+            // (default ~/Desktop), shows a side preview, and copies the
+            // path on Enter rather than the bitmap.
+            setQuery("");
             setKindFilter("file");
+            setScreenshotMode(true);
+            api
+              .searchScreenshots(50)
+              .then((rows) => {
+                setFileEntries(
+                  rows.map((r) => ({ kind: "file" as const, ...r }))
+                );
+              })
+              .catch((e) => onError(String(e)));
             break;
           default:
             // Non-filter commands ("Create Snippet", "Open Preferences", …)
@@ -430,7 +465,14 @@ export function Palette({
         setToast("Pasted from history");
         window.setTimeout(() => setToast(null), 800);
       } else if (isFile(entry)) {
-        if (entry.is_image) {
+        // Screenshot mode: default action is to copy the path (ready to
+        // paste into Slack/email/an issue), not the bitmap. The user can
+        // still Cmd+Shift+C to copy the image content if they need it.
+        if (screenshotMode) {
+          await api.copyFilePath(entry.path);
+          setToast("Path copied");
+          window.setTimeout(() => setToast(null), 700);
+        } else if (entry.is_image) {
           await api.copyFileImage(entry.path);
           setToast("Image copied to clipboard");
           window.setTimeout(() => setToast(null), 1100);
@@ -481,11 +523,13 @@ export function Palette({
       (ctrlOnly && (e.key === "n" || e.key === "j"))
     ) {
       e.preventDefault();
+      mouseActiveRef.current = false;
       setSelected((s) => Math.min(filtered.length - 1, s + 1));
       return;
     }
     if (e.key === "ArrowUp" || (ctrlOnly && (e.key === "p" || e.key === "k"))) {
       e.preventDefault();
+      mouseActiveRef.current = false;
       setSelected((s) => Math.max(0, s - 1));
       return;
     }
@@ -513,13 +557,26 @@ export function Palette({
     })();
     if (cmd && fileEntry && (e.key === "c" || e.key === "C")) {
       e.preventDefault();
-      api
-        .copyFilePath(fileEntry.path)
-        .then(() => {
-          setToast("Path copied");
-          window.setTimeout(() => setToast(null), 700);
-        })
-        .catch((err) => onError(String(err)));
+      // ⌘⇧C copies the image bitmap, ⌘C copies the path. In screenshot
+      // mode the default action is already path-copy, so ⌘⇧C is the way
+      // to grab the image content explicitly.
+      if (e.shiftKey && fileEntry.is_image) {
+        api
+          .copyFileImage(fileEntry.path)
+          .then(() => {
+            setToast("Image copied to clipboard");
+            window.setTimeout(() => setToast(null), 1100);
+          })
+          .catch((err) => onError(String(err)));
+      } else {
+        api
+          .copyFilePath(fileEntry.path)
+          .then(() => {
+            setToast("Path copied");
+            window.setTimeout(() => setToast(null), 700);
+          })
+          .catch((err) => onError(String(err)));
+      }
       return;
     }
     if (cmd && fileEntry && (e.key === "r" || e.key === "R")) {
@@ -619,8 +676,15 @@ export function Palette({
     }, 4000);
   }
 
+  // Selected entry — used both by execute() and by the screenshot
+  // preview pane.
+  const selectedEntry = filtered[selected];
+
   return (
-    <div className="palette" onKeyDown={handleKey}>
+    <div
+      className={`palette${screenshotMode ? " with-preview" : ""}`}
+      onKeyDown={handleKey}
+    >
       <div className="topbar">
         <div
           className="workspace-pill"
@@ -669,7 +733,9 @@ export function Palette({
               key={entryKey(entry)}
               entry={entry}
               selected={i === selected}
-              onHover={() => setSelected(i)}
+              onHover={() => {
+                if (mouseActiveRef.current) setSelected(i);
+              }}
               onClick={() => execute(entry)}
             />
           ))
@@ -677,16 +743,35 @@ export function Palette({
       </div>
 
       <div className="footer">
-        <span><kbd>↵</kbd>Run</span>
-        <span><kbd>⌃N</kbd>/<kbd>⌃P</kbd>Nav</span>
-        <span><kbd>⌘N</kbd>New</span>
-        <span><kbd>⌘E</kbd>Edit</span>
-        <span><kbd>⌘⌫</kbd>Delete</span>
-        <div className="footer-spacer" />
-        <span><kbd>⌘⇧V</kbd>Clipboard</span>
-        <span><kbd>⌘K</kbd>Workspace</span>
-        <span><kbd>esc</kbd>Close</span>
+        {screenshotMode ? (
+          <>
+            <span><kbd>↵</kbd>Copy path</span>
+            <span><kbd>⌘⇧C</kbd>Copy image</span>
+            <span><kbd>⌘↵</kbd>Open</span>
+            <span><kbd>⌘R</kbd>Reveal</span>
+            <div className="footer-spacer" />
+            <span><kbd>esc</kbd>Close</span>
+          </>
+        ) : (
+          <>
+            <span><kbd>↵</kbd>Run</span>
+            <span><kbd>⌃N</kbd>/<kbd>⌃P</kbd>Nav</span>
+            <span><kbd>⌘N</kbd>New</span>
+            <span><kbd>⌘E</kbd>Edit</span>
+            <span><kbd>⌘⌫</kbd>Delete</span>
+            <div className="footer-spacer" />
+            <span><kbd>⌘⇧V</kbd>Clipboard</span>
+            <span><kbd>⌘K</kbd>Workspace</span>
+            <span><kbd>esc</kbd>Close</span>
+          </>
+        )}
       </div>
+
+      {screenshotMode && (
+        <ScreenshotPreview
+          entry={selectedEntry && isFile(selectedEntry) ? selectedEntry : null}
+        />
+      )}
 
       {toast && <div className="toast">✓ {toast}</div>}
       {pendingDelete && (
@@ -965,6 +1050,74 @@ function EntryIcon({ entry }: { entry: PaletteEntry }) {
     );
   }
   return <div className="row-icon glyph" />;
+}
+
+// Side-panel preview for the screenshot mode. Shows the currently
+// selected file's image at a useful size + its metadata.
+function ScreenshotPreview({
+  entry,
+}: {
+  entry: ({ kind: "file" } & import("../types").FileEntry) | null;
+}) {
+  const [src, setSrc] = useState<string | null>(null);
+  useEffect(() => {
+    if (!entry) {
+      setSrc(null);
+      return;
+    }
+    const cached = THUMB_CACHE.get(entry.path);
+    if (cached !== undefined) {
+      setSrc(cached);
+      return;
+    }
+    let cancelled = false;
+    api
+      .fileThumbnail(entry.path)
+      .then((url) => {
+        if (cancelled) return;
+        THUMB_CACHE.set(entry.path, url);
+        setSrc(url);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        THUMB_CACHE.set(entry.path, null);
+        setSrc(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [entry?.path]);
+
+  if (!entry) {
+    return (
+      <aside className="preview-pane">
+        <div className="preview-empty">No selection</div>
+      </aside>
+    );
+  }
+  return (
+    <aside className="preview-pane">
+      <div className="preview-image">
+        {src ? (
+          <img src={src} alt={entry.name} draggable={false} />
+        ) : (
+          <div className="preview-fallback">
+            {entry.name.charAt(0).toUpperCase()}
+          </div>
+        )}
+      </div>
+      <div className="preview-meta">
+        <div className="preview-name" title={entry.name}>
+          {entry.name}
+        </div>
+        <div className="preview-sub">{entry.parent}</div>
+        <div className="preview-sub">
+          {formatSize(entry.size)} ·{" "}
+          {relativeTime(new Date(entry.modified_at).toISOString())}
+        </div>
+      </div>
+    </aside>
+  );
 }
 
 // Lazy thumbnail loader for image files. Mirrors the AppIcon cache so we

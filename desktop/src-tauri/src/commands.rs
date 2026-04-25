@@ -55,6 +55,7 @@ fn slug(name: &str) -> String {
 pub struct Settings {
     pub show_vite_inline: bool,
     pub show_docker_inline: bool,
+    pub screenshot_dirs: Vec<String>,
 }
 
 #[tauri::command]
@@ -63,6 +64,7 @@ pub fn get_settings(store: StoreState<'_>) -> Settings {
     Settings {
         show_vite_inline: s.config.show_vite_inline,
         show_docker_inline: s.config.show_docker_inline,
+        screenshot_dirs: s.config.screenshot_dirs.clone(),
     }
 }
 
@@ -78,6 +80,29 @@ pub fn set_show_docker_inline(value: bool, store: StoreState<'_>) -> Result<(), 
     let mut s = store.write();
     s.config.show_docker_inline = value;
     s.save_config().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn set_screenshot_dirs(value: Vec<String>, store: StoreState<'_>) -> Result<(), String> {
+    let mut s = store.write();
+    s.config.screenshot_dirs = value;
+    s.save_config().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn search_screenshots(limit: Option<usize>, store: StoreState<'_>) -> Vec<FileEntry> {
+    let s = store.read();
+    let roots = s.config.screenshot_dirs.clone();
+    drop(s);
+    files::search(FileSearchOpts {
+        query: None,
+        // All common image extensions — covers PNG (default), JPG, HEIC.
+        extensions: vec![],
+        category: Some("image".into()),
+        roots,
+        sort_by_mtime: true,
+        limit: Some(limit.unwrap_or(50)),
+    })
 }
 
 // ---------- File search ----------

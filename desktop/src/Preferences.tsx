@@ -70,6 +70,20 @@ export function Preferences() {
     }
   }
 
+  async function saveScreenshotDirs(value: string) {
+    if (!settings) return;
+    const dirs = value
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+    setSettings({ ...settings, screenshot_dirs: dirs });
+    try {
+      await api.setScreenshotDirs(dirs);
+    } catch (e) {
+      setError(String(e));
+    }
+  }
+
   async function addWorkspace() {
     const name = newWsName.trim();
     if (!name) return;
@@ -160,6 +174,23 @@ export function Preferences() {
             onClick={toggleDockerInline}
             role="switch"
             aria-checked={!!settings?.show_docker_inline}
+          />
+        </div>
+        <div className="prefs-row">
+          <div className="label">
+            <div className="label-title">Screenshot folders</div>
+            <div className="label-sub">
+              Where <b>Find Screenshots</b> looks. Comma-separated absolute
+              paths. macOS default is <code>~/Desktop</code>; some setups
+              redirect to <code>~/Pictures/Screenshots</code> via{" "}
+              <code>defaults write com.apple.screencapture location</code>.
+            </div>
+          </div>
+          <input
+            className="prefs-input"
+            defaultValue={settings?.screenshot_dirs.join(", ") ?? ""}
+            placeholder="/Users/you/Desktop, /Users/you/Pictures/Screenshots"
+            onBlur={(e) => saveScreenshotDirs(e.target.value)}
           />
         </div>
       </section>
