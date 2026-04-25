@@ -1,25 +1,28 @@
 import { disable, enable, isEnabled } from "@tauri-apps/plugin-autostart";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { useCallback, useEffect, useState } from "react";
-import { api } from "./api";
+import { api, type Settings } from "./api";
 import type { Workspace } from "./types";
 
 export function Preferences() {
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [active, setActive] = useState<string>("");
   const [autostart, setAutostart] = useState<boolean | null>(null);
+  const [settings, setSettings] = useState<Settings | null>(null);
   const [newWsName, setNewWsName] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     try {
-      const [ws, as] = await Promise.all([
+      const [ws, as, s] = await Promise.all([
         api.listWorkspaces(),
         isEnabled().catch(() => false),
+        api.getSettings(),
       ]);
       setWorkspaces(ws.workspaces);
       setActive(ws.active);
       setAutostart(as);
+      setSettings(s);
     } catch (e) {
       setError(String(e));
     }
@@ -40,6 +43,30 @@ export function Preferences() {
       }
     } catch (e) {
       setError(`Autostart: ${e}`);
+    }
+  }
+
+  async function toggleViteInline() {
+    if (!settings) return;
+    const next = !settings.show_vite_inline;
+    setSettings({ ...settings, show_vite_inline: next });
+    try {
+      await api.setShowViteInline(next);
+    } catch (e) {
+      setError(String(e));
+      setSettings({ ...settings, show_vite_inline: !next });
+    }
+  }
+
+  async function toggleDockerInline() {
+    if (!settings) return;
+    const next = !settings.show_docker_inline;
+    setSettings({ ...settings, show_docker_inline: next });
+    try {
+      await api.setShowDockerInline(next);
+    } catch (e) {
+      setError(String(e));
+      setSettings({ ...settings, show_docker_inline: !next });
     }
   }
 
@@ -95,10 +122,45 @@ export function Preferences() {
           <div className="label">
             <div className="label-title">Global hotkey</div>
             <div className="label-sub">
-              Press <kbd>⌃ Space</kbd> anywhere to toggle the palette. Rebinding
+              Press <kbd>⌥ Space</kbd> anywhere to toggle the palette. Rebinding
               lands in a later release.
             </div>
           </div>
+        </div>
+      </section>
+
+      <h2>Plugins</h2>
+      <section>
+        <div className="prefs-row">
+          <div className="label">
+            <div className="label-title">Show Vite ports inline</div>
+            <div className="label-sub">
+              Running Vite dev servers appear in the main palette list. When
+              off, find them via the <b>Show Vite Ports</b> command.
+            </div>
+          </div>
+          <div
+            className={`switch ${settings?.show_vite_inline ? "on" : ""}`}
+            onClick={toggleViteInline}
+            role="switch"
+            aria-checked={!!settings?.show_vite_inline}
+          />
+        </div>
+        <div className="prefs-row">
+          <div className="label">
+            <div className="label-title">Show Docker containers inline</div>
+            <div className="label-sub">
+              Running containers appear in the main list with two rows each
+              (shell + logs). When off, reach them via the <b>Show Docker
+              Containers</b> command.
+            </div>
+          </div>
+          <div
+            className={`switch ${settings?.show_docker_inline ? "on" : ""}`}
+            onClick={toggleDockerInline}
+            role="switch"
+            aria-checked={!!settings?.show_docker_inline}
+          />
         </div>
       </section>
 

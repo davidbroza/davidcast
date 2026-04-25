@@ -1,5 +1,6 @@
 mod actions;
 mod agents;
+mod analytics;
 mod apps;
 mod clipboard;
 mod commands;
@@ -109,6 +110,13 @@ pub fn run() {
             }
         })
         .invoke_handler(tauri::generate_handler![
+            commands::get_settings,
+            commands::set_show_vite_inline,
+            commands::set_show_docker_inline,
+            commands::analytics_record,
+            commands::analytics_tail,
+            commands::analytics_clear,
+            commands::analytics_log_path,
             commands::list_workspaces,
             commands::set_active_workspace,
             commands::create_workspace,

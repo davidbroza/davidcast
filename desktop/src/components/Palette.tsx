@@ -1,6 +1,8 @@
 import Fuse from "fuse.js";
+import { listen } from "@tauri-apps/api/event";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { api } from "../api";
+import { api, type Settings } from "../api";
+import type { Session } from "../App";
 import type { Item, PaletteEntry, Workspace } from "../types";
 import {
   asItem,
@@ -17,10 +19,43 @@ import {
 
 type KindFilter = PaletteEntry["kind"] | null;
 
+// Recents — the last few items the user actually picked, persisted to
+// localStorage so they survive across launches. Drives the empty-query
+// suggestion list.
+const RECENTS_KEY = "davidcast.recents";
+const MAX_RECENTS = 24;
+
+function loadRecents(): Record<string, number> {
+  try {
+    const v = localStorage.getItem(RECENTS_KEY);
+    return v ? JSON.parse(v) : {};
+  } catch {
+    return {};
+  }
+}
+
+function touchRecent(key: string) {
+  const map = loadRecents();
+  map[key] = Date.now();
+  // Keep only the most recent MAX_RECENTS so this never grows unbounded.
+  const trimmed = Object.fromEntries(
+    Object.entries(map)
+      .sort(([, a], [, b]) => b - a)
+      .slice(0, MAX_RECENTS)
+  );
+  try {
+    localStorage.setItem(RECENTS_KEY, JSON.stringify(trimmed));
+  } catch {
+    /* quota — ignore */
+  }
+}
+
 type Props = {
   entries: PaletteEntry[];
   workspaces: Workspace[];
   activeWorkspaceId: string;
+  settings: Settings;
+  session: Session;
   initialFilter?: KindFilter;
   onEdit: (item: Item) => void;
   onCommand: (id: string) => void;
@@ -32,6 +67,8 @@ export function Palette({
   entries,
   workspaces,
   activeWorkspaceId,
+  settings,
+  session,
   initialFilter,
   onEdit,
   onCommand,
@@ -76,8 +113,15 @@ export function Palette({
   const visibleEntries = useMemo(() => {
     if (kindFilter === "clipboard") return clipboardEntries;
     if (kindFilter) return entries.filter((e) => e.kind === kindFilter);
-    return entries;
-  }, [entries, clipboardEntries, kindFilter]);
+    // Unfiltered view: respect inline-display settings. Vite/Docker entries
+    // are still reachable via "Show Vite Ports" / "Show Docker Containers"
+    // commands, which set a kindFilter and bypass this rule.
+    return entries.filter((e) => {
+      if (e.kind === "vite" && !settings.show_vite_inline) return false;
+      if (e.kind === "docker" && !settings.show_docker_inline) return false;
+      return true;
+    });
+  }, [entries, clipboardEntries, kindFilter, settings]);
 
   const fuse = useMemo(
     () =>
@@ -104,7 +148,19 @@ export function Palette({
 
   const filtered = useMemo(() => {
     const q = query.trim();
-    if (!q) return visibleEntries;
+    if (!q) {
+      // Empty query: float recently-used items to the top, newest first,
+      // then keep the rest in their original (kind-priority) order.
+      const recents = loadRecents();
+      const ranked = [...visibleEntries];
+      ranked.sort((a, b) => {
+        const ra = recents[entryKey(a)] ?? 0;
+        const rb = recents[entryKey(b)] ?? 0;
+        if (ra !== rb) return rb - ra;
+        return 0;
+      });
+      return ranked;
+    }
     const results = fuse.search(q);
     results.sort((a, b) => {
       const sa = a.score ?? 1;
@@ -133,6 +189,43 @@ export function Palette({
     inputRef.current?.focus();
   }, []);
 
+  // When the palette is reopened (Alt+Space toggle), wipe the previous query
+  // and any active filter so the user starts on a clean slate.
+  useEffect(() => {
+    const off = listen("palette:show", () => {
+      setQuery("");
+      setSelected(0);
+      setKindFilter(initialFilter ?? null);
+    });
+    return () => {
+      off.then((fn) => fn());
+    };
+  }, [initialFilter]);
+
+  // No-results detection: when the user has typed something but nothing
+  // matched, debounce 600ms and log it once. Reset whenever query changes.
+  const noResultsLoggedRef = useRef<string | null>(null);
+  useEffect(() => {
+    const q = query.trim();
+    if (q.length === 0 || filtered.length > 0) {
+      noResultsLoggedRef.current = null;
+      return;
+    }
+    if (noResultsLoggedRef.current === q) return;
+    const handle = window.setTimeout(() => {
+      if (noResultsLoggedRef.current === q) return;
+      noResultsLoggedRef.current = q;
+      api
+        .analyticsRecord(session.id, "no_results", {
+          q,
+          dwell_ms: Date.now() - session.startedAt,
+          kind_filter: kindFilter,
+        })
+        .catch(() => {});
+    }, 600);
+    return () => window.clearTimeout(handle);
+  }, [query, filtered.length, session, kindFilter]);
+
   useEffect(() => {
     if (!listRef.current) return;
     const el = listRef.current.querySelector<HTMLDivElement>(".row.active");
@@ -140,40 +233,49 @@ export function Palette({
   }, [selected]);
 
   async function execute(entry: PaletteEntry) {
+    const startedAt = Date.now();
+    const queryAtExecute = query;
+    const resultCount = filtered.length;
+    let outcome: "filter" | "executed" | "cancelled" = "executed";
+    let success = true;
+    let error: string | undefined;
+
     try {
       if (isCommand(entry)) {
-        // Inline-handle filter commands; everything else bubbles up.
-        if (entry.id === "show.agents") {
-          setQuery("");
-          setKindFilter("agent");
-          return;
+        // Filter-only commands set the kindFilter and stop here. They aren't
+        // really "executions" of an item, so we log them as outcome="filter".
+        outcome = "filter";
+        switch (entry.id) {
+          case "show.agents":
+            setQuery("");
+            setKindFilter("agent");
+            break;
+          case "show.vite":
+            setQuery("");
+            setKindFilter("vite");
+            break;
+          case "show.docker":
+            setQuery("");
+            setKindFilter("docker");
+            break;
+          case "search.snippets":
+            setQuery("");
+            setKindFilter("snippet");
+            break;
+          case "search.quicklinks":
+            setQuery("");
+            setKindFilter("quicklink");
+            break;
+          case "show.clipboard":
+            setQuery("");
+            setKindFilter("clipboard");
+            break;
+          default:
+            // Non-filter commands ("Create Snippet", "Open Preferences", …)
+            // bubble up to App; mark as a real execution.
+            outcome = "executed";
+            onCommand(entry.id);
         }
-        if (entry.id === "show.vite") {
-          setQuery("");
-          setKindFilter("vite");
-          return;
-        }
-        if (entry.id === "show.docker") {
-          setQuery("");
-          setKindFilter("docker");
-          return;
-        }
-        if (entry.id === "search.snippets") {
-          setQuery("");
-          setKindFilter("snippet");
-          return;
-        }
-        if (entry.id === "search.quicklinks") {
-          setQuery("");
-          setKindFilter("quicklink");
-          return;
-        }
-        if (entry.id === "show.clipboard") {
-          setQuery("");
-          setKindFilter("clipboard");
-          return;
-        }
-        onCommand(entry.id);
       } else if (isApp(entry)) {
         await api.executeApp(entry.path);
       } else if (isAgent(entry)) {
@@ -202,17 +304,51 @@ export function Palette({
         const args: Record<string, string> = {};
         for (const p of placeholders) {
           const v = window.prompt(`${p}?`, "");
-          if (v === null) return;
+          if (v === null) {
+            outcome = "cancelled";
+            break;
+          }
           args[p] = v;
         }
-        await api.executeQuicklink(entry.id, args);
+        if (outcome !== "cancelled") {
+          await api.executeQuicklink(entry.id, args);
+        }
       } else if (isClipboard(entry)) {
         await api.executeClipboard(entry.id);
         setToast("Pasted from history");
         window.setTimeout(() => setToast(null), 800);
       }
     } catch (e) {
-      onError(String(e));
+      success = false;
+      error = String(e);
+      onError(error);
+    }
+
+    // Fire-and-forget local analytics — never await, never throw.
+    api
+      .analyticsRecord(session.id, "execute", {
+        kind: entry.kind,
+        name: shortName(entry),
+        outcome,
+        success,
+        error,
+        duration_ms: Date.now() - startedAt,
+        q: queryAtExecute,
+        result_count: resultCount,
+        dwell_ms: Date.now() - session.startedAt,
+        kind_filter: kindFilter,
+      })
+      .catch(() => {});
+
+    // Bump recents on successful real executions only — we don't want
+    // "Create Snippet" or filter chips to dominate the suggestion list.
+    if (
+      success &&
+      outcome === "executed" &&
+      !isCommand(entry) &&
+      !isClipboard(entry)
+    ) {
+      touchRecent(entryKey(entry));
     }
   }
 
@@ -449,6 +585,13 @@ function nameOf(e: PaletteEntry): string {
   if (e.kind === "docker") return e.name;
   if (e.kind === "clipboard") return e.text;
   return (e as { name?: string }).name ?? "";
+}
+
+/// Short label used in analytics. Strips long bodies (clipboard text) so
+/// the JSONL stays grep-friendly.
+function shortName(e: PaletteEntry): string {
+  const n = nameOf(e);
+  return n.length > 80 ? n.slice(0, 77) + "…" : n;
 }
 
 function filterLabel(k: PaletteEntry["kind"]): string {

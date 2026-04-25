@@ -2,7 +2,8 @@ use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_global_shortcut::{Code, Modifiers, Shortcut, ShortcutState};
 
 pub fn default_shortcut() -> Shortcut {
-    Shortcut::new(Some(Modifiers::CONTROL), Code::Space)
+    // ⌥ Space — historical Raycast default, easier on the left hand than ⌃ Space.
+    Shortcut::new(Some(Modifiers::ALT), Code::Space)
 }
 
 pub fn clipboard_shortcut() -> Shortcut {

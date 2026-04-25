@@ -22,7 +22,7 @@ There is no JS test runner and no separate lint step — `pnpm build` is the onl
 
 ## Architecture
 
-**One Tauri app, two webviews, one Rust core.** `desktop/src-tauri/src/lib.rs` owns startup: it loads the JSON store into a `RwLock<Store>` managed by Tauri, registers the `⌃ Space` global shortcut, builds the menu-bar tray, and sets `ActivationPolicy::Accessory` so there's no dock icon. The frontend bundle is shared between two windows — `main` (the palette) and `prefs` — distinguished at runtime by `?view=prefs` in the URL; `desktop/src/main.tsx` reads that param and mounts either `App` or `Preferences`.
+**One Tauri app, two webviews, one Rust core.** `desktop/src-tauri/src/lib.rs` owns startup: it loads the JSON store into a `RwLock<Store>` managed by Tauri, registers the `⌥ Space` global shortcut, builds the menu-bar tray, and sets `ActivationPolicy::Accessory` so there's no dock icon. The frontend bundle is shared between two windows — `main` (the palette) and `prefs` — distinguished at runtime by `?view=prefs` in the URL; `desktop/src/main.tsx` reads that param and mounts either `App` or `Preferences`.
 
 **Frontend never touches disk.** Every read/write goes through Tauri commands in `commands.rs`, wrapped on the JS side by `desktop/src/api.ts`. Adding a new command requires three coordinated edits:
 1. Define the `#[tauri::command]` in `commands.rs`.
@@ -42,12 +42,12 @@ If the command touches a window or plugin not already permitted, also add the pe
 
 **Agent detection.** `agents.rs` runs `ps -axo pid,ppid,etime,tty,comm,args`, filters for `claude` (direct binary or `node /.../claude/cli.js`), uses `lsof` for cwd, and climbs the PPID chain to identify the parent terminal app. Pure subprocess work — no proc filesystem assumptions.
 
-**Window auto-hide.** The palette hides on blur (`on_window_event` in `lib.rs`) — that's intentional and what makes `⌃ Space` feel like a launcher. Don't add focus-stealing UI inside the palette window or it will dismiss itself.
+**Window auto-hide.** The palette hides on blur (`on_window_event` in `lib.rs`) — that's intentional and what makes `⌥ Space` feel like a launcher. Don't add focus-stealing UI inside the palette window or it will dismiss itself.
 
 ## Conventions worth knowing
 
 - **`PLAN.md` and `README.md` are authoritative** for product scope and the phased roadmap. `FEATURES_PLANNED.md` is a scratchpad — implementations there may already be shipped or may be stale.
 - **No CSP** (`tauri.conf.json` sets `csp: null`) — this is intentional for the local-only app, not an oversight.
 - **Raycast import quirks** live in `commands.rs::normalize_raycast_url` and `import_from_file` — Raycast's `{argument name="x"}` becomes `{x}`, and `openWith` bundle ids map to the `OpenIn` enum. Tests cover this.
-- **Hotkey is hard-coded** to `⌃ Space` in `hotkey.rs::default_shortcut`. Rebinding UI is on the roadmap, not built.
+- **Hotkey is hard-coded** to `⌥ Space` in `hotkey.rs::default_shortcut`. Rebinding UI is on the roadmap, not built.
 - **Commit messages**: never mention Claude Code as the tool; the model name is fine (per user's global instruction).

@@ -53,6 +53,18 @@ pub struct Workspace {
 pub struct Config {
     pub active_workspace: String,
     pub workspaces: Vec<Workspace>,
+    /// Whether running Vite dev servers appear inline in the unfiltered
+    /// palette list. The "Show Vite Ports" command always finds them
+    /// regardless of this flag.
+    #[serde(default = "default_true")]
+    pub show_vite_inline: bool,
+    /// Same idea for Docker containers.
+    #[serde(default = "default_true")]
+    pub show_docker_inline: bool,
+}
+
+fn default_true() -> bool {
+    true
 }
 
 impl Default for Config {
@@ -64,6 +76,8 @@ impl Default for Config {
                 name: "Personal".to_string(),
                 color: Some("#7bd88f".to_string()),
             }],
+            show_vite_inline: true,
+            show_docker_inline: true,
         }
     }
 }

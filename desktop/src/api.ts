@@ -10,7 +10,31 @@ import type {
   WorkspaceList,
 } from "./types";
 
+export interface Settings {
+  show_vite_inline: boolean;
+  show_docker_inline: boolean;
+}
+
 export const api = {
+  // Settings
+  getSettings: () => invoke<Settings>("get_settings"),
+  setShowViteInline: (value: boolean) =>
+    invoke<void>("set_show_vite_inline", { value }),
+  setShowDockerInline: (value: boolean) =>
+    invoke<void>("set_show_docker_inline", { value }),
+
+  // Analytics — local-only, fire-and-forget JSONL append.
+  analyticsRecord: (sessionId: string, kind: string, data: unknown) =>
+    invoke<void>("analytics_record", {
+      sessionId,
+      kind,
+      data,
+    }),
+  analyticsTail: (limit: number) =>
+    invoke<unknown[]>("analytics_tail", { limit }),
+  analyticsClear: () => invoke<void>("analytics_clear"),
+  analyticsLogPath: () => invoke<string | null>("analytics_log_path"),
+
   // Workspaces
   listWorkspaces: () => invoke<WorkspaceList>("list_workspaces"),
   setActiveWorkspace: (id: string) =>

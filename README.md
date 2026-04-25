@@ -1,6 +1,6 @@
 # davidcast
 
-A keyboard-first launcher for macOS. Press `⌃ Space` anywhere, type, hit Enter. Searches across your snippets, quicklinks, installed apps, and built-in commands in one place.
+A keyboard-first launcher for macOS. Press `⌥ Space` anywhere, type, hit Enter. Searches across your snippets, quicklinks, installed apps, and built-in commands in one place.
 
 Built as a personal replacement for Raycast's core flows (quicklinks + snippets + app launching), with one difference: **the store is plain JSON**. You can hand-edit it, version-control it, sync it through iCloud Drive, or — soon — let Claude edit it through an MCP server.
 
@@ -16,7 +16,7 @@ Raycast is great, but its data lives in an encrypted SQLite database you can't s
 
 | | |
 |---|---|
-| **Global palette** | `⌃ Space` anywhere. Single input, fuzzy search. Always focused. |
+| **Global palette** | `⌥ Space` anywhere. Single input, fuzzy search. Always focused. |
 | **Snippets** | Text stored on disk, pasted at cursor (or just copied — Accessibility permission optional). `{placeholder}` args supported. |
 | **Quicklinks** | URL templates with `{arg}` substitution. Open in default browser, Chrome, or Safari. |
 | **App launcher** | Scans `/Applications`, `/System/Applications`, `~/Applications`. Launch anything with a keyword. |
@@ -85,21 +85,21 @@ Skipping this is fine — snippets still land on the clipboard, you just `⌘V` 
 
 **Quicklink:**
 
-1. `⌃ Space` → type `create quicklink` → `↵`
+1. `⌥ Space` → type `create quicklink` → `↵`
 2. Name `GitHub search`, URL `https://github.com/search?q={query}`, Keyword `ghs`
 3. `⌘↵`
-4. `⌃ Space` → `ghs` → `↵` → prompts for `query`, opens GitHub
+4. `⌥ Space` → `ghs` → `↵` → prompts for `query`, opens GitHub
 
 **Snippet:**
 
 1. Copy any text (from anywhere)
-2. `⌃ Space` → type `create snippet` → `↵` — the value field is already pre-filled from your clipboard
+2. `⌥ Space` → type `create snippet` → `↵` — the value field is already pre-filled from your clipboard
 3. Name it, `⌘↵`
-4. Next time: `⌃ Space` → name → `↵` → "✓ Copied to clipboard" toast, then it pastes
+4. Next time: `⌥ Space` → name → `↵` → "✓ Copied to clipboard" toast, then it pastes
 
 **App:**
 
-1. `⌃ Space` → `iterm` → `↵` — launches iTerm
+1. `⌥ Space` → `iterm` → `↵` — launches iTerm
 
 ## Architecture
 
@@ -113,7 +113,7 @@ Skipping this is fine — snippets still land on the clipboard, you just `⌘V` 
 │             ▼                              │
 │   Rust core                                │
 │     ├── JSON store (atomic writes)         │
-│     ├── global hotkey  (⌃ Space)           │
+│     ├── global hotkey  (⌥ Space)           │
 │     ├── app scanner                        │
 │     ├── clipboard / osascript paste        │
 │     └── Raycast import                     │
@@ -181,7 +181,7 @@ davidcast/
 
 - **Name:** davidcast
 - **Stack:** Tauri v2 (Rust core + React/TS frontend)
-- **Default hotkey:** `⌃ Space` (Raycast uses `⌥ Space`, so no collision during migration)
+- **Default hotkey:** `⌥ Space` (Raycast uses `⌥ Space`, so no collision during migration)
 - **Local storage:** JSON files in `~/Library/Application Support/davidcast/`
 - **Cloud target (phase 2):** Cloudflare Worker + KV / D1
 - **macOS activation policy:** Accessory (menu-bar only, no dock)

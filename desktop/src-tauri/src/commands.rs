@@ -1,5 +1,6 @@
 use crate::actions;
 use crate::agents::{self, AgentEntry};
+use crate::analytics;
 use crate::apps::{self, AppEntry};
 use crate::clipboard::{self, ClipboardEntry};
 use crate::docker_ps::{self, DockerEntry};
@@ -45,6 +46,63 @@ fn slug(name: &str) -> String {
         }
     }
     out.trim_end_matches('-').to_string()
+}
+
+// ---------- Settings ----------
+
+#[derive(serde::Serialize)]
+pub struct Settings {
+    pub show_vite_inline: bool,
+    pub show_docker_inline: bool,
+}
+
+#[tauri::command]
+pub fn get_settings(store: StoreState<'_>) -> Settings {
+    let s = store.read();
+    Settings {
+        show_vite_inline: s.config.show_vite_inline,
+        show_docker_inline: s.config.show_docker_inline,
+    }
+}
+
+#[tauri::command]
+pub fn set_show_vite_inline(value: bool, store: StoreState<'_>) -> Result<(), String> {
+    let mut s = store.write();
+    s.config.show_vite_inline = value;
+    s.save_config().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn set_show_docker_inline(value: bool, store: StoreState<'_>) -> Result<(), String> {
+    let mut s = store.write();
+    s.config.show_docker_inline = value;
+    s.save_config().map_err(|e| e.to_string())
+}
+
+// ---------- Analytics ----------
+
+#[tauri::command]
+pub fn analytics_record(
+    session_id: String,
+    kind: String,
+    data: serde_json::Value,
+) -> Result<(), String> {
+    analytics::record(session_id, kind, data)
+}
+
+#[tauri::command]
+pub fn analytics_tail(limit: usize) -> Vec<serde_json::Value> {
+    analytics::tail(limit)
+}
+
+#[tauri::command]
+pub fn analytics_clear() -> Result<(), String> {
+    analytics::clear()
+}
+
+#[tauri::command]
+pub fn analytics_log_path() -> Option<String> {
+    analytics::log_path().map(|p| p.to_string_lossy().to_string())
 }
 
 // ---------- Workspace commands ----------
