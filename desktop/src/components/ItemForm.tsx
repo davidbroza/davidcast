@@ -24,6 +24,15 @@ export function ItemForm({ initial, presetKind, onDone, onCancel, onError }: Pro
   const [text, setText] = useState(
     initial && isSnippet(initial) ? initial.text : ""
   );
+  const [sensitive, setSensitive] = useState(
+    initial && isSnippet(initial) ? !!initial.sensitive : false
+  );
+  // For sensitive snippets the textarea is masked unless the user
+  // opts to peek. New sensitive snippets start unmasked (you need to
+  // see what you're typing); existing ones start masked.
+  const [showSecret, setShowSecret] = useState(
+    !(initial && isSnippet(initial) && initial.sensitive)
+  );
   const [url, setUrl] = useState(
     initial && isQuicklink(initial) ? initial.url : ""
   );
@@ -77,9 +86,10 @@ export function ItemForm({ initial, presetKind, onDone, onCancel, onError }: Pro
             name,
             text,
             keyword: kw ?? null,
+            sensitive,
           });
         } else {
-          await api.createSnippet({ name, text, keyword: kw });
+          await api.createSnippet({ name, text, keyword: kw, sensitive });
         }
       } else {
         if (!url.trim()) {
@@ -199,14 +209,54 @@ export function ItemForm({ initial, presetKind, onDone, onCancel, onError }: Pro
           </div>
 
           {kind === "snippet" ? (
-            <div className="form-field">
-              <label>Text</label>
-              <textarea
-                value={text}
-                onChange={(e) => setText(e.target.value)}
-                placeholder="Paste content…"
-              />
-            </div>
+            <>
+              <div className="form-field">
+                <label>
+                  Text
+                  {sensitive && (
+                    <button
+                      type="button"
+                      className="link-btn"
+                      onClick={() => setShowSecret((v) => !v)}
+                      tabIndex={-1}
+                    >
+                      {showSecret ? "Hide" : "Peek"}
+                    </button>
+                  )}
+                </label>
+                <textarea
+                  value={text}
+                  onChange={(e) => setText(e.target.value)}
+                  placeholder="Paste content…"
+                  spellCheck={!sensitive}
+                  style={
+                    sensitive && !showSecret
+                      ? { WebkitTextSecurity: "disc", textSecurity: "disc" } as React.CSSProperties
+                      : undefined
+                  }
+                />
+              </div>
+              <div className="form-field form-field-inline">
+                <label htmlFor="form-sensitive">
+                  Treat as sensitive
+                  <span className="form-field-hint">
+                    Hides the value in the palette list and masks it here.
+                    Run / paste still works as normal.
+                  </span>
+                </label>
+                <input
+                  id="form-sensitive"
+                  type="checkbox"
+                  checked={sensitive}
+                  onChange={(e) => {
+                    setSensitive(e.target.checked);
+                    // Switching to sensitive on an existing item should
+                    // re-mask immediately; switching off reveals.
+                    setShowSecret(!e.target.checked);
+                  }}
+                />
+              </div>
+            </>
           ) : (
             <>
               <div className="form-field">

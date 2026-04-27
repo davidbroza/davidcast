@@ -114,13 +114,18 @@ export const api = {
   showPreferences: () => invoke<void>("show_preferences"),
 
   // Snippets
-  createSnippet: (input: { name: string; text: string; keyword?: string }) =>
-    invoke<Snippet>("create_snippet", { input }),
+  createSnippet: (input: {
+    name: string;
+    text: string;
+    keyword?: string;
+    sensitive?: boolean;
+  }) => invoke<Snippet>("create_snippet", { input }),
   updateSnippet: (input: {
     id: string;
     name?: string;
     text?: string;
     keyword?: string | null;
+    sensitive?: boolean;
   }) => invoke<Snippet>("update_snippet", { input }),
   deleteSnippet: (id: string) => invoke<void>("delete_snippet", { id }),
 

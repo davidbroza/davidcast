@@ -1034,8 +1034,11 @@ function Row({
     badge = "App";
   } else if (isSnippet(entry)) {
     name = entry.name;
-    sub = oneLine(entry.text);
-    badge = "Snippet";
+    // Never show the snippet body in the row — values can carry
+    // secrets (passwords, tokens) and the palette is often visible
+    // in screen-shares / recordings. Keyword (if any) gets the slot.
+    sub = entry.keyword ? `keyword: ${entry.keyword}` : "";
+    badge = entry.sensitive ? "🔒 Sensitive" : "Snippet";
   } else if (isQuicklink(entry)) {
     name = entry.name;
     sub = entry.url;

@@ -7,6 +7,7 @@ export interface Snippet {
   updated_at: string;
   deleted?: boolean;
   rev?: number;
+  sensitive?: boolean;
 }
 
 export interface Quicklink {

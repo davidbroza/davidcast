@@ -867,6 +867,8 @@ pub struct NewSnippet {
     pub name: String,
     pub text: String,
     pub keyword: Option<String>,
+    #[serde(default)]
+    pub sensitive: bool,
 }
 
 #[tauri::command]
@@ -883,6 +885,7 @@ pub fn create_snippet(input: NewSnippet, store: StoreState<'_>) -> Result<Snippe
         updated_at: ts,
         deleted: false,
         rev: 1,
+        sensitive: input.sensitive,
     };
     items.push(item.clone());
     s.save_snippets(&items).map_err(|e| e.to_string())?;
@@ -895,6 +898,7 @@ pub struct UpdateSnippet {
     pub name: Option<String>,
     pub text: Option<String>,
     pub keyword: Option<Option<String>>,
+    pub sensitive: Option<bool>,
 }
 
 #[tauri::command]
@@ -907,6 +911,7 @@ pub fn update_snippet(input: UpdateSnippet, store: StoreState<'_>) -> Result<Sni
     if let Some(n) = input.name { it.name = n; }
     if let Some(t) = input.text { it.text = t; }
     if let Some(k) = input.keyword { it.keyword = k.filter(|v| !v.trim().is_empty()); }
+    if let Some(b) = input.sensitive { it.sensitive = b; }
     it.updated_at = now();
     it.rev += 1;
     let updated = it.clone();
@@ -1171,6 +1176,7 @@ pub fn import_from_file(path: String, store: StoreState<'_>) -> Result<ImportSum
                 updated_at: ts,
                 deleted: false,
                 rev: 1,
+                sensitive: false,
             });
             n_snip += 1;
             continue;

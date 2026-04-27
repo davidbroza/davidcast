@@ -13,6 +13,11 @@ pub struct Snippet {
     pub deleted: bool,
     #[serde(default)]
     pub rev: u64,
+    /// When true the value is treated as a secret: never shown in the
+    /// palette row subtitle, and the edit form starts with the
+    /// textarea masked. Default false (existing snippets unaffected).
+    #[serde(default)]
+    pub sensitive: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

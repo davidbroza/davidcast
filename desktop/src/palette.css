@@ -719,3 +719,37 @@ body[data-view="palette"] {
   padding: 5px 10px;
   font-size: 12px;
 }
+
+/* ---------- Sensitive snippet form bits ---------- */
+.form-field-inline {
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 12px;
+}
+.form-field-inline label {
+  flex: 1;
+  cursor: pointer;
+}
+.form-field-inline input[type="checkbox"] {
+  margin-top: 4px;
+  cursor: pointer;
+}
+.form-field-hint {
+  display: block;
+  color: var(--fg-faint);
+  font-size: 11px;
+  margin-top: 2px;
+  font-weight: normal;
+}
+.link-btn {
+  background: none;
+  border: none;
+  color: var(--accent);
+  font-size: 11px;
+  cursor: pointer;
+  padding: 0 6px;
+  margin-left: 6px;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.link-btn:hover { opacity: 0.8; }
