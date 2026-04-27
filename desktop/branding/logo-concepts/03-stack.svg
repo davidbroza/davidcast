@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200" role="img" aria-label="davidcast — stack">
+  <title>davidcast — stack</title>
+  <rect x="28" y="40" width="144" height="36" rx="10" fill="currentColor"/>
+  <rect x="28" y="92" width="144" height="16" rx="5" fill="currentColor" opacity="0.55"/>
+  <rect x="28" y="120" width="144" height="16" rx="5" fill="currentColor" opacity="0.4"/>
+  <rect x="28" y="148" width="144" height="16" rx="5" fill="currentColor" opacity="0.28"/>
+</svg>

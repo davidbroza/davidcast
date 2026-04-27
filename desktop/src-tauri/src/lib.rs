@@ -9,6 +9,7 @@ mod files;
 mod git;
 mod hotkey;
 mod icons;
+mod skills;
 mod store;
 mod themes;
 mod types;
@@ -26,6 +27,7 @@ use tauri_plugin_global_shortcut::GlobalShortcutExt;
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
@@ -72,12 +74,11 @@ pub fn run() {
             let quit_i = MenuItem::with_id(app, "quit", "Quit davidcast", true, Some("Cmd+Q"))?;
             let menu = Menu::with_items(app, &[&show_i, &prefs_i, &sep_i, &quit_i])?;
 
+            let tray_icon = tauri::image::Image::from_bytes(include_bytes!(
+                "../icons/tray.png"
+            ))?;
             let _tray = TrayIconBuilder::with_id("main-tray")
-                .icon(
-                    app.default_window_icon()
-                        .cloned()
-                        .expect("default window icon missing"),
-                )
+                .icon(tray_icon)
                 .icon_as_template(true)
                 .menu(&menu)
                 // Left-click opens the palette; the menu surfaces on right-click.
@@ -117,10 +118,14 @@ pub fn run() {
             commands::get_settings,
             commands::set_show_vite_inline,
             commands::set_show_docker_inline,
+            commands::set_show_snippets_inline,
+            commands::set_show_quicklinks_inline,
             commands::set_screenshot_dirs,
+            commands::set_check_updates_on_launch,
             commands::search_screenshots,
             commands::analytics_record,
             commands::analytics_tail,
+            commands::analytics_summary,
             commands::analytics_clear,
             commands::analytics_log_path,
             commands::search_files,
@@ -129,6 +134,8 @@ pub fn run() {
             commands::copy_file_path,
             commands::copy_file_image,
             commands::file_thumbnail,
+            commands::list_skills,
+            commands::read_skill,
             commands::wm_left_half,
             commands::wm_right_half,
             commands::wm_top_half,
