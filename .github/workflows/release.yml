@@ -1,0 +1,162 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-latest
+    timeout-minutes: 35
+
+    env:
+      # Signs the .app bundle for the auto-updater. Set as a repo secret —
+      # see README §Auto-update. Empty password keypair (we generated with
+      # `tauri signer generate -p ""`).
+      TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Need full history so we can compute notes since the previous tag.
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v3
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+          cache-dependency-path: desktop/pnpm-lock.yaml
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: desktop/src-tauri
+          key: release
+
+      - name: Verify signing key is set
+        run: |
+          if [ -z "${TAURI_SIGNING_PRIVATE_KEY}" ]; then
+            echo "::error::TAURI_SIGNING_PRIVATE_KEY secret is not set — auto-updater can't sign this build."
+            echo "::error::Run \`gh secret set TAURI_SIGNING_PRIVATE_KEY < ~/.tauri/davidcast.key\` once."
+            exit 1
+          fi
+
+      - name: Install dependencies
+        working-directory: desktop
+        run: pnpm install --frozen-lockfile
+
+      - name: Build (Apple Silicon)
+        working-directory: desktop
+        run: pnpm tauri build --target aarch64-apple-darwin
+
+      - name: Build (Intel)
+        working-directory: desktop
+        run: pnpm tauri build --target x86_64-apple-darwin
+
+      # Tarball each .app and sign the tarball — the .sig contents go into
+      # latest.json so the updater plugin can verify the download.
+      - name: Package + sign + write latest.json
+        id: sig
+        run: |
+          set -euo pipefail
+          aarch64_dir="desktop/src-tauri/target/aarch64-apple-darwin/release/bundle/macos"
+          x86_64_dir="desktop/src-tauri/target/x86_64-apple-darwin/release/bundle/macos"
+
+          aarch64_tar="davidcast-${GITHUB_REF_NAME}-aarch64.app.tar.gz"
+          x86_64_tar="davidcast-${GITHUB_REF_NAME}-x86_64.app.tar.gz"
+
+          (cd "$aarch64_dir" && tar -czf "$GITHUB_WORKSPACE/$aarch64_tar" davidcast.app)
+          (cd "$x86_64_dir"  && tar -czf "$GITHUB_WORKSPACE/$x86_64_tar"  davidcast.app)
+
+          # Sign the renamed tarballs with our minisign key. `tauri signer sign`
+          # writes <file>.sig next to the input.
+          (cd desktop && pnpm tauri signer sign "$GITHUB_WORKSPACE/$aarch64_tar")
+          (cd desktop && pnpm tauri signer sign "$GITHUB_WORKSPACE/$x86_64_tar")
+
+          aarch64_sig=$(cat "$GITHUB_WORKSPACE/${aarch64_tar}.sig")
+          x86_64_sig=$(cat "$GITHUB_WORKSPACE/${x86_64_tar}.sig")
+
+          # Tauri's updater wants `version` without the "v" prefix.
+          version="${GITHUB_REF_NAME#v}"
+          pub_date=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          base="https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}"
+
+          jq -n \
+            --arg version "$version" \
+            --arg pub_date "$pub_date" \
+            --arg aarch64_sig "$aarch64_sig" \
+            --arg aarch64_url "$base/$aarch64_tar" \
+            --arg x86_64_sig "$x86_64_sig" \
+            --arg x86_64_url "$base/$x86_64_tar" \
+            --arg notes "davidcast $GITHUB_REF_NAME" \
+            '{
+              version: $version,
+              notes: $notes,
+              pub_date: $pub_date,
+              platforms: {
+                "darwin-aarch64": { signature: $aarch64_sig, url: $aarch64_url },
+                "darwin-x86_64":  { signature: $x86_64_sig,  url: $x86_64_url  }
+              }
+            }' > "$GITHUB_WORKSPACE/latest.json"
+
+          echo "aarch64_tar=$aarch64_tar" >> "$GITHUB_OUTPUT"
+          echo "x86_64_tar=$x86_64_tar" >> "$GITHUB_OUTPUT"
+
+      - name: Generate release notes
+        id: notes
+        run: |
+          PREV=$(git describe --tags --abbrev=0 "${GITHUB_REF_NAME}^" 2>/dev/null || echo "")
+          {
+            echo "## What's in this release"
+            echo
+            if [ -n "$PREV" ]; then
+              echo "_Changes since \`$PREV\`._"
+              echo
+              git log --no-merges "${PREV}..${GITHUB_REF_NAME}" --pretty='- %s'
+            else
+              echo "_Initial release — full history below._"
+              echo
+              git log --no-merges "${GITHUB_REF_NAME}" --pretty='- %s'
+            fi
+            echo
+            echo "## Install"
+            echo
+            echo "- **Apple Silicon:** download \`davidcast-${GITHUB_REF_NAME}-aarch64.app.tar.gz\` (or the matching \`.dmg\`)."
+            echo "- **Intel:** download \`davidcast-${GITHUB_REF_NAME}-x86_64.app.tar.gz\`."
+            echo "- The build is unsigned (no Apple Developer cert). First launch: right-click the \`.app\` → **Open** → confirm."
+            echo
+            echo "## Auto-update"
+            echo
+            echo "Already on davidcast? You don't need to download anything — open the app and the updater will offer this version on launch."
+          } > /tmp/notes.md
+
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ARTIFACTS=()
+          ARTIFACTS+=("${{ steps.sig.outputs.aarch64_tar }}")
+          ARTIFACTS+=("${{ steps.sig.outputs.x86_64_tar }}")
+          ARTIFACTS+=("${{ steps.sig.outputs.aarch64_tar }}.sig")
+          ARTIFACTS+=("${{ steps.sig.outputs.x86_64_tar }}.sig")
+          ARTIFACTS+=("latest.json")
+          for f in desktop/src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/*.dmg \
+                   desktop/src-tauri/target/x86_64-apple-darwin/release/bundle/dmg/*.dmg; do
+            [ -f "$f" ] && ARTIFACTS+=("$f")
+          done
+          gh release create "${GITHUB_REF_NAME}" \
+            --title "${GITHUB_REF_NAME}" \
+            --notes-file /tmp/notes.md \
+            "${ARTIFACTS[@]}"

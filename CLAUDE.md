@@ -1,0 +1,78 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Commands
+
+All commands run from `desktop/` (the only active package; `extension/`, `worker/`, `mcp/` in `PLAN.md` are aspirational and not yet scaffolded).
+
+```bash
+pnpm install                  # bootstrap (pnpm only — pnpm-lock.yaml is committed)
+pnpm tauri dev                # full dev: vite on :1420 + Rust hot reload
+pnpm dev                      # frontend-only (rarely useful — no Tauri APIs)
+pnpm build                    # tsc --noEmit + vite build (this IS the typecheck)
+pnpm tauri build              # release .app at src-tauri/target/release/bundle/macos/
+
+cargo test --manifest-path src-tauri/Cargo.toml                  # all Rust tests
+cargo test --manifest-path src-tauri/Cargo.toml <name>           # one test by name
+cargo check --manifest-path src-tauri/Cargo.toml                 # fast Rust typecheck
+```
+
+There is no JS test runner and no separate lint step — `pnpm build` is the only frontend gate. Rust tests live inline as `#[cfg(test)] mod tests` (see `actions.rs`, `agents.rs`, `commands.rs`).
+
+## Architecture
+
+**One Tauri app, two webviews, one Rust core.** `desktop/src-tauri/src/lib.rs` owns startup: it loads the JSON store into a `RwLock<Store>` managed by Tauri, registers the `⌥ Space` global shortcut, builds the menu-bar tray, and sets `ActivationPolicy::Accessory` so there's no dock icon. The frontend bundle is shared between two windows — `main` (the palette) and `prefs` — distinguished at runtime by `?view=prefs` in the URL; `desktop/src/main.tsx` reads that param and mounts either `App` or `Preferences`.
+
+**Frontend never touches disk.** Every read/write goes through Tauri commands in `commands.rs`, wrapped on the JS side by `desktop/src/api.ts`. Adding a new command requires three coordinated edits:
+1. Define the `#[tauri::command]` in `commands.rs`.
+2. Register it in the `invoke_handler![...]` macro in `lib.rs`.
+3. Add a wrapper in `src/api.ts`.
+If the command touches a window or plugin not already permitted, also add the permission to `src-tauri/capabilities/default.json`.
+
+**Store layout is workspace-scoped, sync-ready.** `Store::load()` (`store.rs`) creates `~/Library/Application Support/davidcast/` with `config.json` (workspace list + active id) and per-workspace `workspaces/<id>/{snippets,quicklinks}.json`. Workspace membership is implicit in the file path — items themselves don't carry a `workspace` field. All writes are atomic (write-temp-then-rename in `write_json`). `delete_workspace` intentionally leaves the directory on disk for safety.
+
+**Items are sync-shaped from day 1.** Every `Snippet` and `Quicklink` (`types.rs`) has `id` (UUIDv7), `created_at`, `updated_at`, `deleted` (tombstone — never hard-delete), and `rev` (monotonic). The phase-2 Cloudflare sync engine is designed to plug into these fields without a migration. Don't hard-delete, don't reuse fields.
+
+**Palette is a heterogeneous list.** `list_palette` in `commands.rs` returns `Vec<PaletteEntry>` — a tagged union of `Command | Snippet | Quicklink | App | Agent`. The frontend (`components/Palette.tsx`) runs Fuse.js fuzzy search across all of them in one pass. Built-in commands (`builtin_commands()`) are how features like "Create Snippet", "Open Preferences", "Switch Workspace" surface — they're searchable entries with stable ids dispatched in `App.tsx`'s `onCommand`.
+
+**macOS-specific bridges (osascript).** Two flows shell out to AppleScript:
+- `actions.rs::paste_at_cursor` — sends `⌘V` via System Events. Fails silently without Accessibility permission; the snippet still lands on the clipboard.
+- `agents.rs::activate_*` — finds the terminal tab matching a `tty` and brings it forward (iTerm2 + Terminal supported; others fall back to `open -a`).
+
+**Agent detection.** `agents.rs` runs `ps -axo pid,ppid,etime,tty,comm,args`, filters for `claude` (direct binary or `node /.../claude/cli.js`), uses `lsof` for cwd, and climbs the PPID chain to identify the parent terminal app. Pure subprocess work — no proc filesystem assumptions.
+
+**Window auto-hide.** The palette hides on blur (`on_window_event` in `lib.rs`) — that's intentional and what makes `⌥ Space` feel like a launcher. Don't add focus-stealing UI inside the palette window or it will dismiss itself.
+
+## Conventions worth knowing
+
+- **`PLAN.md` and `README.md` are authoritative** for product scope and the phased roadmap. `FEATURES_PLANNED.md` is a scratchpad — implementations there may already be shipped or may be stale.
+- **No CSP** (`tauri.conf.json` sets `csp: null`) — this is intentional for the local-only app, not an oversight.
+- **Raycast import quirks** live in `commands.rs::normalize_raycast_url` and `import_from_file` — Raycast's `{argument name="x"}` becomes `{x}`, and `openWith` bundle ids map to the `OpenIn` enum. Tests cover this.
+- **Hotkey is hard-coded** to `⌥ Space` in `hotkey.rs::default_shortcut`. Rebinding UI is on the roadmap, not built.
+- **Commit messages**: never mention Claude Code as the tool; the model name is fine (per user's global instruction).
+
+## Features (keep this list current)
+
+The user-facing "Show Help" view (`desktop/src/components/Help.tsx`) is the source of truth for what davidcast can do. **When you add, remove, or rename a feature, update both this list and `Help.tsx` in the same change.** The list below mirrors the groups in the Help view; it exists in CLAUDE.md so future-you can see the full surface without opening the app.
+
+- **Palette basics** — `⌥ Space` toggles the floating launcher (`hotkey.rs`). Hides on blur. Fuzzy search via Fuse.js across every entry kind in one pass (`Palette.tsx`).
+- **Snippets & Quicklinks** — per-workspace, sync-shaped on disk. Built-in commands: `create.snippet`, `create.quicklink`, `search.snippets`, `search.quicklinks`. Inline display can be turned off in Preferences (`show_snippets_inline`, `show_quicklinks_inline` in `Config`); when off, items only surface under the Search filter command.
+- **Apps** — installed macOS apps with real icons (`apps.rs`, `icons.rs`).
+- **Agents** — `show.agents` lists running Claude CLI sessions; Enter activates the terminal tab (`agents.rs` + osascript).
+- **Vite ports** — `show.vite` lists detected dev servers (`vite_ports.rs`); inline display gated by `show_vite_inline`.
+- **Docker** — `show.docker` lists running containers with two rows each (shell + logs) via `docker_ps.rs`; inline display gated by `show_docker_inline`.
+- **Files** — `files.find` runs an `fd`-backed search with `:png` / `:img` / `:newest` filter tokens (`files.rs`). `files.screenshots` is a dedicated mode with a side preview pane and ↵-copies-path semantics. ⌘C copies path, ⌘⇧C copies image bitmap (PNG/JPEG only), ⌘R reveals in Finder, ⌘↵ opens in default app. Screenshot search auto-resolves the macOS screenshot location via `defaults read com.apple.screencapture location` and merges it with any user-configured dirs (so a stale `screenshot_dirs` entry never silently zero-results), expands `~/`, and includes `.mov` / `.mp4` so screen recordings show up alongside stills.
+- **Skills** — `skills.search` browses Claude Code SKILL.md files under `~/.claude/skills` (personal) and `~/.claude/plugins/cache/<marketplace>/<plugin>/<version>/skills` (installed plugins). Side preview pane shows the markdown body (`skills.rs` parses YAML frontmatter; `Palette.tsx::SkillPreview` renders). ↵ copies path, ⌘⇧C copies the full skill body (read via `read_skill`), ⌘↵ opens in default editor, ⌘R reveals.
+- **Clipboard history** — `⌘⇧V` opens it directly (clipboard hotkey in `hotkey.rs`); `show.clipboard` is the discoverable command. Background watcher in `clipboard.rs`.
+- **Window management** — `wm.left/right/top/bottom/maximize/center` move the frontmost (non-davidcast) window via osascript with the standard 60ms hide-then-act trick (`window_mgmt.rs`, `commands.rs::run_wm`).
+- **Themes** — `themes.switch` lists built-ins plus any JSON dropped in `~/Library/Application Support/davidcast/themes/`. Selecting one writes `Config::theme` and applies CSS variables on the document root (`themes.rs`, `App.tsx::applyTheme`).
+- **Workspaces** — `switch.workspace` (`⌘K`) opens the inline switcher. CRUD lives in Preferences. Items are scoped per-workspace by directory layout (`workspaces/<id>/{snippets,quicklinks}.json`).
+- **Preferences** — `open.preferences` (`⌘,`) opens the inline preferences view (autostart, search filters, plugin toggles, screenshot dirs, workspaces, Raycast import). Implemented as a `View` kind in `App.tsx`, not a separate window.
+- **Help** — `help.show` opens this list inside the app (`components/Help.tsx`).
+- **Import** — Preferences → Import. Auto-detects Raycast quicklink/snippet JSON exports (`commands.rs::import_from_file`, `normalize_raycast_url`).
+- **Analytics** — local-only JSONL append (`analytics.rs`). Never network. Used by recents-bias scoring in the palette. `show.analytics` opens an inline view (`components/Analytics.tsx`) that aggregates the log via the `analytics_summary` command — top queries, top items, kind breakdown, last-30-days opens sparkline, success rate, average dwell, plus a "Clear log" button. The aggregation is pure (no I/O in the test path) and unit-tested in `analytics.rs::tests`.
+- **Auto-updater** — `tauri-plugin-updater` polls `https://github.com/davidbroza/davidcast/releases/latest/download/latest.json` on launch (toggle in Preferences, default on) and via the `app.check_updates` built-in command. Updates are minisign-signed; the public key is in `tauri.conf.json::plugins.updater.pubkey`, the private key lives only as the `TAURI_SIGNING_PRIVATE_KEY` GitHub Actions secret. The release workflow tarballs each `.app`, calls `tauri signer sign` on the tarball, then writes a `latest.json` with the signature contents and uploads everything to the GitHub Release. The frontend renders an `UpdateBanner` at the bottom of the palette when a newer version is available — Install & restart triggers `downloadAndInstall()` then `relaunch()`.
+- **Git backup** — `backup.rs` shells out to the system `git` CLI to push the entire store directory to a user-supplied remote. Working tree IS the data dir; .git lives at `<data_dir>/.backup-git/` so it stays out of sight. No credential storage — auth piggybacks on whatever lets the user `git push` from terminal (SSH key, gh CLI, credential helper). The `Config::backup` block holds enabled/remote/branch/include_analytics/last_synced_ms/last_error/auto_interval_min. A 60s background thread in `lib.rs` calls `backup::sync` when enabled + initialized + dirty + at least `auto_interval_min` minutes since last push. Manual Sync now / Pull / Force push (`--force-with-lease`) buttons live in Preferences → Backup. `.gitignore` is regenerated on every sync from the current `include_analytics` flag (default off — the log contains every query). Conflicts: pull --rebase happy path; on diverged history, sync errors out with "use Force Push or resolve manually" — per the user's design, the app never auto-resolves cross-machine conflicts.
+
+When this list and `Help.tsx` drift, the user notices because the Help view is a button-press away — keeping them aligned is part of "feature done".

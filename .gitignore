@@ -1,0 +1,43 @@
+# Node
+node_modules/
+.pnpm-store/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Rust / Tauri
+target/
+**/*.rs.bk
+*.pdb
+
+# Build outputs
+dist/
+build/
+desktop/src-tauri/gen/schemas/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Env / secrets
+.env
+.env.local
+.env.*.local
+*.pem
+
+# Runtime data (never commit the store)
+store/
+*.local.json
+
+# Claude Code local state
+.claude/
+
+# Local marketing screenshots — copies live in davidbroza.dev/public/davidcast/
+screenshots/

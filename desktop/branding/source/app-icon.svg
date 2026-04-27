@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024" role="img" aria-label="davidcast app icon">
+  <title>davidcast app icon</title>
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%"   stop-color="#1E1B4B"/>
+      <stop offset="100%" stop-color="#4F46E5"/>
+    </linearGradient>
+  </defs>
+  <rect x="80" y="80" width="864" height="864" rx="192" fill="url(#bg)"/>
+  <g transform="translate(252 252) scale(2.6)" stroke="#ffffff" stroke-linecap="round" fill="none">
+    <circle cx="60" cy="100" r="18" fill="#ffffff" stroke="none"/>
+    <path d="M 92 68 Q 125 100 92 132" stroke-width="14"/>
+    <path d="M 128 48 Q 175 100 128 152" stroke-width="14"/>
+  </g>
+</svg>

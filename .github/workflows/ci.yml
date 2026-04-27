@@ -1,0 +1,81 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Cancel an in-flight run if a new push to the same ref lands.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: build + tests
+    runs-on: macos-latest
+    timeout-minutes: 25
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v3
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+          cache-dependency-path: desktop/pnpm-lock.yaml
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: llvm-tools-preview
+
+      # Cache target/ across runs — Tauri's transitive deps are heavy.
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: desktop/src-tauri
+          key: ci
+
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-llvm-cov
+
+      - name: Install dependencies
+        working-directory: desktop
+        run: pnpm install --frozen-lockfile
+
+      # `pnpm build` runs `tsc --noEmit && vite build` — the only frontend
+      # gate; failures here block the release workflow downstream.
+      - name: Frontend typecheck + build
+        working-directory: desktop
+        run: pnpm build
+
+      - name: Frontend tests + coverage
+        working-directory: desktop
+        run: pnpm test:coverage
+
+      - name: Rust check
+        working-directory: desktop
+        run: cargo check --manifest-path src-tauri/Cargo.toml
+
+      - name: Rust tests + coverage
+        working-directory: desktop/src-tauri
+        # --workspace covers all crates; --lcov writes a Codecov-friendly
+        # report. Tests run too — no need for a separate `cargo test` step.
+        run: cargo llvm-cov --workspace --lcov --output-path lcov.info
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          # OIDC token; codecov-action picks it up automatically for
+          # public repos. No CODECOV_TOKEN secret needed.
+          files: desktop/coverage/lcov.info,desktop/src-tauri/lcov.info
+          flags: frontend,rust
+          fail_ci_if_error: false

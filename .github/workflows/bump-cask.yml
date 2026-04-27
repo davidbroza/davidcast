@@ -1,0 +1,96 @@
+name: Bump Homebrew cask
+
+# Fires after the Release workflow publishes a v*.*.* GitHub release.
+# Computes shasums of the new tarballs, rewrites Casks/davidcast.rb in
+# the homebrew-tap repo, and pushes — so `brew install --cask
+# davidbroza/tap/davidcast` always points at the latest version
+# without any manual cask edits.
+#
+# Requires a `TAP_GITHUB_TOKEN` secret on this repo: a fine-grained
+# PAT scoped to davidbroza/homebrew-tap with Contents: Read and write.
+# See README §Auto-update for the one-time setup.
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+jobs:
+  bump:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout tap
+        uses: actions/checkout@v4
+        with:
+          repository: davidbroza/homebrew-tap
+          token: ${{ secrets.TAP_GITHUB_TOKEN }}
+          path: tap
+
+      - name: Compute shasums
+        id: shas
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          set -euo pipefail
+          VERSION="${TAG#v}"
+          BASE="https://github.com/davidbroza/davidcast/releases/download/${TAG}"
+          aarch64_sha=$(curl -fsSL "$BASE/davidcast-${TAG}-aarch64.app.tar.gz" | shasum -a 256 | awk '{print $1}')
+          x86_64_sha=$(curl -fsSL  "$BASE/davidcast-${TAG}-x86_64.app.tar.gz"  | shasum -a 256 | awk '{print $1}')
+          echo "version=$VERSION"          >> "$GITHUB_OUTPUT"
+          echo "aarch64_sha=$aarch64_sha"  >> "$GITHUB_OUTPUT"
+          echo "x86_64_sha=$x86_64_sha"    >> "$GITHUB_OUTPUT"
+
+      - name: Rewrite cask
+        env:
+          VERSION:     ${{ steps.shas.outputs.version }}
+          AARCH64_SHA: ${{ steps.shas.outputs.aarch64_sha }}
+          X86_64_SHA:  ${{ steps.shas.outputs.x86_64_sha }}
+        run: |
+          cat > tap/Casks/davidcast.rb <<RUBY
+          cask "davidcast" do
+            version "${VERSION}"
+
+            on_arm do
+              sha256 "${AARCH64_SHA}"
+              url "https://github.com/davidbroza/davidcast/releases/download/v#{version}/davidcast-v#{version}-aarch64.app.tar.gz"
+            end
+            on_intel do
+              sha256 "${X86_64_SHA}"
+              url "https://github.com/davidbroza/davidcast/releases/download/v#{version}/davidcast-v#{version}-x86_64.app.tar.gz"
+            end
+
+            name "davidcast"
+            desc "Keyboard-first launcher for macOS"
+            homepage "https://github.com/davidbroza/davidcast"
+
+            auto_updates true
+            depends_on macos: ">= :ventura"
+
+            app "davidcast.app"
+
+            zap trash: [
+              "~/Library/Application Support/davidcast",
+              "~/Library/Logs/davidcast",
+              "~/Library/Preferences/com.davidcast.app.plist",
+              "~/Library/Saved Application State/com.davidcast.app.savedState",
+            ]
+          end
+          RUBY
+
+      - name: Commit + push
+        working-directory: tap
+        env:
+          VERSION: ${{ steps.shas.outputs.version }}
+        run: |
+          git config user.name  "davidcast-bot"
+          git config user.email "davidcast-bot@users.noreply.github.com"
+          if git diff --quiet -- Casks/davidcast.rb; then
+            echo "Cask already at this version, nothing to do."
+            exit 0
+          fi
+          git add Casks/davidcast.rb
+          git commit -m "davidcast ${VERSION}"
+          git push
