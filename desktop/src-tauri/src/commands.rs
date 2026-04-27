@@ -6,6 +6,7 @@ use crate::clipboard::{self, ClipboardEntry};
 use crate::docker_ps::{self, DockerEntry};
 use crate::files::{self, FileEntry, FileSearchOpts};
 use crate::icons;
+use crate::skills::{self, SkillEntry};
 use crate::store::Store;
 use crate::types::*;
 use crate::themes::{self, Theme};
@@ -57,7 +58,10 @@ fn slug(name: &str) -> String {
 pub struct Settings {
     pub show_vite_inline: bool,
     pub show_docker_inline: bool,
+    pub show_snippets_inline: bool,
+    pub show_quicklinks_inline: bool,
     pub screenshot_dirs: Vec<String>,
+    pub check_updates_on_launch: bool,
 }
 
 #[tauri::command]
@@ -66,8 +70,18 @@ pub fn get_settings(store: StoreState<'_>) -> Settings {
     Settings {
         show_vite_inline: s.config.show_vite_inline,
         show_docker_inline: s.config.show_docker_inline,
+        show_snippets_inline: s.config.show_snippets_inline,
+        show_quicklinks_inline: s.config.show_quicklinks_inline,
         screenshot_dirs: s.config.screenshot_dirs.clone(),
+        check_updates_on_launch: s.config.check_updates_on_launch,
     }
+}
+
+#[tauri::command]
+pub fn set_check_updates_on_launch(value: bool, store: StoreState<'_>) -> Result<(), String> {
+    let mut s = store.write();
+    s.config.check_updates_on_launch = value;
+    s.save_config().map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -85,6 +99,20 @@ pub fn set_show_docker_inline(value: bool, store: StoreState<'_>) -> Result<(), 
 }
 
 #[tauri::command]
+pub fn set_show_snippets_inline(value: bool, store: StoreState<'_>) -> Result<(), String> {
+    let mut s = store.write();
+    s.config.show_snippets_inline = value;
+    s.save_config().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn set_show_quicklinks_inline(value: bool, store: StoreState<'_>) -> Result<(), String> {
+    let mut s = store.write();
+    s.config.show_quicklinks_inline = value;
+    s.save_config().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 pub fn set_screenshot_dirs(value: Vec<String>, store: StoreState<'_>) -> Result<(), String> {
     let mut s = store.write();
     s.config.screenshot_dirs = value;
@@ -94,13 +122,33 @@ pub fn set_screenshot_dirs(value: Vec<String>, store: StoreState<'_>) -> Result<
 #[tauri::command]
 pub fn search_screenshots(limit: Option<usize>, store: StoreState<'_>) -> Vec<FileEntry> {
     let s = store.read();
-    let roots = s.config.screenshot_dirs.clone();
+    let configured: Vec<String> = s.config.screenshot_dirs.clone();
     drop(s);
+
+    // Expand `~/...`, drop nonexistent paths so a stale config never silently
+    // returns zero results.
+    let mut roots: Vec<String> = configured
+        .into_iter()
+        .map(|p| files::expand_tilde(&p))
+        .filter(|p| std::path::Path::new(p).exists())
+        .collect();
+
+    // Always merge in the macOS-resolved screenshot location + ~/Desktop.
+    // Without this, a misconfigured `screenshot_dirs` (e.g. a folder the
+    // user renamed) means the palette shows nothing — even though the
+    // screenshots live in the OS-default folder.
+    for p in files::default_screenshot_dirs() {
+        if !roots.contains(&p) {
+            roots.push(p);
+        }
+    }
+
     files::search(FileSearchOpts {
         query: None,
-        // All common image extensions — covers PNG (default), JPG, HEIC.
         extensions: vec![],
-        category: Some("image".into()),
+        // Includes PNG/JPG/HEIC + .mov/.mp4 screen recordings that
+        // `screencapture -V` produces.
+        category: Some("screenshot".into()),
         roots,
         sort_by_mtime: true,
         limit: Some(limit.unwrap_or(50)),
@@ -153,6 +201,18 @@ pub fn copy_file_image(path: String, app: AppHandle) -> Result<(), String> {
 #[tauri::command]
 pub fn file_thumbnail(path: String) -> Option<String> {
     files::thumbnail_data_url(&path)
+}
+
+// ---------- Skills ----------
+
+#[tauri::command]
+pub fn list_skills() -> Vec<SkillEntry> {
+    skills::list_skills()
+}
+
+#[tauri::command]
+pub fn read_skill(path: String) -> Result<String, String> {
+    skills::read_body(&path)
 }
 
 // ---------- Themes ----------
@@ -259,6 +319,11 @@ pub fn analytics_tail(limit: usize) -> Vec<serde_json::Value> {
 #[tauri::command]
 pub fn analytics_clear() -> Result<(), String> {
     analytics::clear()
+}
+
+#[tauri::command]
+pub fn analytics_summary() -> analytics::AnalyticsSummary {
+    analytics::summarize()
 }
 
 #[tauri::command]
@@ -386,11 +451,17 @@ pub enum PaletteEntry {
     Agent(AgentEntry),
     Vite(VitePortEntry),
     Docker(DockerPaletteEntry),
-    // Constructed on the frontend (`api.listClipboard()` returns the inner
-    // shape; the kind tag is added in TS). Kept here so the wire union is
-    // exhaustive and matches the TS `PaletteEntry`.
+    // The variants below are constructed on the frontend (their list
+    // commands return the inner shape; the kind tag is added in TS).
+    // Kept here so the wire union is exhaustive and matches TS.
     #[allow(dead_code)]
     Clipboard(ClipboardEntry),
+    #[allow(dead_code)]
+    File(FileEntry),
+    #[allow(dead_code)]
+    Theme(Theme),
+    #[allow(dead_code)]
+    Skill(SkillEntry),
 }
 
 fn builtin_commands() -> Vec<CommandEntry> {
@@ -446,6 +517,11 @@ fn builtin_commands() -> Vec<CommandEntry> {
             subtitle: "Most recent images on Desktop & Pictures".into(),
         },
         CommandEntry {
+            id: "skills.search".into(),
+            name: "Search Skills".into(),
+            subtitle: "Browse Claude Code SKILL.md files — preview, copy path, open".into(),
+        },
+        CommandEntry {
             id: "wm.left".into(),
             name: "Window: Left Half".into(),
             subtitle: "Resize the frontmost window to the left half".into(),
@@ -484,6 +560,21 @@ fn builtin_commands() -> Vec<CommandEntry> {
             id: "open.preferences".into(),
             name: "Open Preferences".into(),
             subtitle: "Autostart, workspaces, import".into(),
+        },
+        CommandEntry {
+            id: "help.show".into(),
+            name: "Show Help".into(),
+            subtitle: "Every davidcast feature, command, and shortcut".into(),
+        },
+        CommandEntry {
+            id: "show.analytics".into(),
+            name: "Show Analytics".into(),
+            subtitle: "Top queries, top items, daily activity — local only".into(),
+        },
+        CommandEntry {
+            id: "app.check_updates".into(),
+            name: "Check for Updates".into(),
+            subtitle: "Ping the release endpoint and install if newer".into(),
         },
         CommandEntry {
             id: "switch.workspace".into(),
@@ -1054,23 +1145,14 @@ pub fn clear_clipboard() -> Result<(), String> {
 
 #[tauri::command]
 pub fn show_preferences(app: AppHandle) -> Result<(), String> {
-    use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
-    if let Some(w) = app.get_webview_window("prefs") {
+    use tauri::{Emitter, Manager};
+    // Preferences live inline inside the main palette window now. Show
+    // and focus the window, then nudge the React app to switch its view.
+    if let Some(w) = app.get_webview_window("main") {
         w.show().map_err(|e| e.to_string())?;
         w.set_focus().map_err(|e| e.to_string())?;
-        return Ok(());
     }
-    WebviewWindowBuilder::new(
-        &app,
-        "prefs",
-        WebviewUrl::App("index.html?view=prefs".into()),
-    )
-    .title("davidcast — Preferences")
-    .inner_size(640.0, 520.0)
-    .resizable(true)
-    .center()
-    .focused(true)
-    .build()
-    .map_err(|e| e.to_string())?;
+    app.emit("preferences:show", ())
+        .map_err(|e| e.to_string())?;
     Ok(())
 }

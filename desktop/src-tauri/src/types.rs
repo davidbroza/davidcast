@@ -61,6 +61,14 @@ pub struct Config {
     /// Same idea for Docker containers.
     #[serde(default = "default_true")]
     pub show_docker_inline: bool,
+    /// Whether the user's snippets appear inline in the unfiltered
+    /// palette list. When off, they're only reachable via the
+    /// "Search Snippets" command. Defaults on.
+    #[serde(default = "default_true")]
+    pub show_snippets_inline: bool,
+    /// Same idea for quicklinks.
+    #[serde(default = "default_true")]
+    pub show_quicklinks_inline: bool,
     /// Folders the "Find Screenshots" command scans, newest-mtime first.
     /// `~/Desktop` is the macOS default; `~/Pictures/Screenshots` is the
     /// most common redirect target. Stored as resolved absolute paths.
@@ -70,6 +78,10 @@ pub struct Config {
     /// `light`, `high-contrast`) or any user-imported theme filename.
     #[serde(default = "default_theme_id")]
     pub theme: String,
+    /// Whether to ping the GitHub Releases updater endpoint at startup.
+    /// Manual "Check for Updates" still works either way.
+    #[serde(default = "default_true")]
+    pub check_updates_on_launch: bool,
 }
 
 fn default_theme_id() -> String {
@@ -103,8 +115,11 @@ impl Default for Config {
             }],
             show_vite_inline: true,
             show_docker_inline: true,
+            show_snippets_inline: true,
+            show_quicklinks_inline: true,
             screenshot_dirs: default_screenshot_dirs(),
             theme: default_theme_id(),
+            check_updates_on_launch: true,
         }
     }
 }

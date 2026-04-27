@@ -13,6 +13,7 @@ import {
   isDocker,
   isFile,
   isQuicklink,
+  isSkill,
   isSnippet,
   isTheme,
   isVite,
@@ -126,6 +127,7 @@ export function Palette({
   const [fileEntries, setFileEntries] = useState<PaletteEntry[]>([]);
   const [screenshotMode, setScreenshotMode] = useState(false);
   const [themeEntries, setThemeEntries] = useState<PaletteEntry[]>([]);
+  const [skillEntries, setSkillEntries] = useState<PaletteEntry[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const deleteTimer = useRef<number | null>(null);
@@ -208,10 +210,30 @@ export function Palette({
     };
   }, [kindFilter, onError]);
 
+  // Skills — scan ~/.claude/skills + plugin caches each time the filter
+  // is opened so a freshly-installed skill shows up immediately.
+  useEffect(() => {
+    if (kindFilter !== "skill") return;
+    let cancelled = false;
+    api
+      .listSkills()
+      .then((rows) => {
+        if (cancelled) return;
+        setSkillEntries(
+          rows.map((r) => ({ kind: "skill" as const, ...r }))
+        );
+      })
+      .catch((e) => onError(String(e)));
+    return () => {
+      cancelled = true;
+    };
+  }, [kindFilter, onError]);
+
   const visibleEntries = useMemo(() => {
     if (kindFilter === "clipboard") return clipboardEntries;
     if (kindFilter === "file") return fileEntries;
     if (kindFilter === "theme") return themeEntries;
+    if (kindFilter === "skill") return skillEntries;
     if (kindFilter) return entries.filter((e) => e.kind === kindFilter);
     // Unfiltered view: respect inline-display settings. Vite/Docker entries
     // are still reachable via "Show Vite Ports" / "Show Docker Containers"
@@ -219,9 +241,11 @@ export function Palette({
     return entries.filter((e) => {
       if (e.kind === "vite" && !settings.show_vite_inline) return false;
       if (e.kind === "docker" && !settings.show_docker_inline) return false;
+      if (e.kind === "snippet" && !settings.show_snippets_inline) return false;
+      if (e.kind === "quicklink" && !settings.show_quicklinks_inline) return false;
       return true;
     });
-  }, [entries, clipboardEntries, fileEntries, themeEntries, kindFilter, settings]);
+  }, [entries, clipboardEntries, fileEntries, themeEntries, skillEntries, kindFilter, settings]);
 
   const fuse = useMemo(
     () =>
@@ -233,6 +257,7 @@ export function Palette({
           { name: "image", weight: 1 },
           { name: "mode", weight: 1.5 },
           { name: "subtitle", weight: 0.8 },
+          { name: "description", weight: 0.5 },
           { name: "url", weight: 0.4 },
           { name: "text", weight: 0.3 },
           { name: "path", weight: 0.2 },
@@ -444,6 +469,10 @@ export function Palette({
               })
               .catch((e) => onError(String(e)));
             break;
+          case "skills.search":
+            setQuery("");
+            setKindFilter("skill");
+            break;
           default:
             // Non-filter commands ("Create Snippet", "Open Preferences", …)
             // bubble up to App; mark as a real execution.
@@ -511,6 +540,14 @@ export function Palette({
         } else {
           await api.openFile(entry.path);
         }
+      } else if (isSkill(entry)) {
+        // Default action: copy the SKILL.md path so the user can paste
+        // it into a chat or open it from another tool. ⌘↵ opens it in
+        // the default editor; ⌘⇧C copies the file's full markdown
+        // contents (handy for pasting the whole skill into a prompt).
+        await api.copyFilePath(entry.path);
+        setToast("Path copied");
+        window.setTimeout(() => setToast(null), 700);
       }
     } catch (e) {
       success = false;
@@ -570,9 +607,10 @@ export function Palette({
       e.preventDefault();
       const entry = filtered[selected];
       if (!entry) return;
-      // ⌘↵ on a file forces "open" even for images (whose default action
-      // would otherwise copy the bitmap to the clipboard).
-      if (cmd && isFile(entry)) {
+      // ⌘↵ on a file or skill forces "open in default app" even for
+      // images (whose default action would otherwise copy the bitmap)
+      // and for skills (whose default action is path-copy).
+      if (cmd && (isFile(entry) || isSkill(entry))) {
         api
           .openFile(entry.path)
           .catch((err) => onError(String(err)));
@@ -582,27 +620,41 @@ export function Palette({
       return;
     }
 
-    // File-row shortcuts: copy path / reveal in Finder.
-    const fileEntry = (() => {
+    // Path-bearing row shortcuts: copy path / reveal in Finder.
+    // Files and skills both expose a `path` field and share the same
+    // shortcuts (⌘C, ⌘⇧C, ⌘R).
+    const pathEntry = (() => {
       const entry = filtered[selected];
-      return entry && isFile(entry) ? entry : null;
+      if (!entry) return null;
+      if (isFile(entry)) return { path: entry.path, kind: "file" as const, isImage: entry.is_image };
+      if (isSkill(entry)) return { path: entry.path, kind: "skill" as const, isImage: false };
+      return null;
     })();
-    if (cmd && fileEntry && (e.key === "c" || e.key === "C")) {
+    if (cmd && pathEntry && (e.key === "c" || e.key === "C")) {
       e.preventDefault();
-      // ⌘⇧C copies the image bitmap, ⌘C copies the path. In screenshot
-      // mode the default action is already path-copy, so ⌘⇧C is the way
-      // to grab the image content explicitly.
-      if (e.shiftKey && fileEntry.is_image) {
+      if (e.shiftKey && pathEntry.kind === "file" && pathEntry.isImage) {
+        // ⌘⇧C on an image copies the bitmap.
         api
-          .copyFileImage(fileEntry.path)
+          .copyFileImage(pathEntry.path)
           .then(() => {
             setToast("Image copied to clipboard");
             window.setTimeout(() => setToast(null), 1100);
           })
           .catch((err) => onError(String(err)));
+      } else if (e.shiftKey && pathEntry.kind === "skill") {
+        // ⌘⇧C on a skill copies the markdown body — handy for pasting
+        // the whole skill into a chat prompt.
+        api
+          .readSkill(pathEntry.path)
+          .then(async (body) => {
+            await navigator.clipboard.writeText(body);
+            setToast("Skill copied to clipboard");
+            window.setTimeout(() => setToast(null), 900);
+          })
+          .catch((err) => onError(String(err)));
       } else {
         api
-          .copyFilePath(fileEntry.path)
+          .copyFilePath(pathEntry.path)
           .then(() => {
             setToast("Path copied");
             window.setTimeout(() => setToast(null), 700);
@@ -611,9 +663,9 @@ export function Palette({
       }
       return;
     }
-    if (cmd && fileEntry && (e.key === "r" || e.key === "R")) {
+    if (cmd && pathEntry && (e.key === "r" || e.key === "R")) {
       e.preventDefault();
-      api.revealFile(fileEntry.path).catch((err) => onError(String(err)));
+      api.revealFile(pathEntry.path).catch((err) => onError(String(err)));
       return;
     }
     if (e.key === "Escape") {
@@ -708,13 +760,13 @@ export function Palette({
     }, 4000);
   }
 
-  // Selected entry — used both by execute() and by the screenshot
-  // preview pane.
+  // Selected entry — used both by execute() and by the side preview pane.
   const selectedEntry = filtered[selected];
+  const showSidePreview = screenshotMode || kindFilter === "skill";
 
   return (
     <div
-      className={`palette${screenshotMode ? " with-preview" : ""}`}
+      className={`palette${showSidePreview ? " with-preview" : ""}`}
       onKeyDown={handleKey}
     >
       <div className="topbar">
@@ -784,6 +836,15 @@ export function Palette({
             <div className="footer-spacer" />
             <span><kbd>esc</kbd>Close</span>
           </>
+        ) : kindFilter === "skill" ? (
+          <>
+            <span><kbd>↵</kbd>Copy path</span>
+            <span><kbd>⌘⇧C</kbd>Copy contents</span>
+            <span><kbd>⌘↵</kbd>Open in editor</span>
+            <span><kbd>⌘R</kbd>Reveal</span>
+            <div className="footer-spacer" />
+            <span><kbd>esc</kbd>Close</span>
+          </>
         ) : (
           <>
             <span><kbd>↵</kbd>Run</span>
@@ -802,6 +863,11 @@ export function Palette({
       {screenshotMode && (
         <ScreenshotPreview
           entry={selectedEntry && isFile(selectedEntry) ? selectedEntry : null}
+        />
+      )}
+      {kindFilter === "skill" && !screenshotMode && (
+        <SkillPreview
+          entry={selectedEntry && isSkill(selectedEntry) ? selectedEntry : null}
         />
       )}
 
@@ -825,6 +891,7 @@ function entryKey(e: PaletteEntry): string {
   if (isFile(e)) return `file:${e.path}`;
   if (isTheme(e)) return `theme:${e.id}`;
   if (isClipboard(e)) return `clip:${e.id}`;
+  if (isSkill(e)) return `skill:${e.path}`;
   return `${e.kind}:${e.id}`;
 }
 
@@ -849,10 +916,12 @@ function kindPriority(e: PaletteEntry): number {
       return 6;
     case "file":
       return 7;
-    case "theme":
+    case "skill":
       return 8;
-    case "clipboard":
+    case "theme":
       return 9;
+    case "clipboard":
+      return 10;
   }
 }
 
@@ -862,6 +931,7 @@ function nameOf(e: PaletteEntry): string {
   if (e.kind === "docker") return e.name;
   if (e.kind === "file") return e.name;
   if (e.kind === "theme") return e.name;
+  if (e.kind === "skill") return e.name;
   if (e.kind === "clipboard") return e.text;
   return (e as { name?: string }).name ?? "";
 }
@@ -903,6 +973,8 @@ function filterLabel(k: PaletteEntry["kind"]): string {
       return "Files";
     case "theme":
       return "Themes";
+    case "skill":
+      return "Skills";
   }
 }
 
@@ -928,6 +1000,8 @@ function placeholderFor(k: KindFilter): string {
       return "Find files — try :png screenshot, :img :newest, ⌘C path, ⌘R reveal";
     case "theme":
       return "Pick a theme — ↵ applies it, drop JSONs in ~/.../davidcast/themes";
+    case "skill":
+      return "Search Claude Code skills — ↵ copies path, ⌘↵ opens, ⌘⇧C copies contents";
     default:
       return "Type to search — snippets, quicklinks, apps, agents, commands…";
   }
@@ -1001,6 +1075,10 @@ function Row({
       : entry.ext
       ? entry.ext.toUpperCase()
       : "File";
+  } else if (isSkill(entry)) {
+    name = entry.name;
+    sub = entry.description || entry.path;
+    badge = entry.source === "user" ? "Skill" : `Skill · ${entry.source}`;
   }
 
   const keyword =
@@ -1093,6 +1171,13 @@ function EntryIcon({ entry }: { entry: PaletteEntry }) {
     return (
       <div className="row-icon glyph file">
         <FileGlyph />
+      </div>
+    );
+  }
+  if (isSkill(entry)) {
+    return (
+      <div className="row-icon glyph skill">
+        <SkillGlyph />
       </div>
     );
   }
@@ -1192,6 +1277,79 @@ function ScreenshotPreview({
     </aside>
   );
 }
+
+// Side-panel preview for a SKILL.md — shows the description (from
+// frontmatter) on top, then the raw markdown body. The body is loaded
+// lazily on selection change and cached so navigating with arrow keys
+// doesn't re-read the file each time.
+function SkillPreview({
+  entry,
+}: {
+  entry: ({ kind: "skill" } & import("../types").SkillEntry) | null;
+}) {
+  const [body, setBody] = useState<string | null>(null);
+  useEffect(() => {
+    if (!entry) {
+      setBody(null);
+      return;
+    }
+    const cached = SKILL_BODY_CACHE.get(entry.path);
+    if (cached !== undefined) {
+      setBody(cached);
+      return;
+    }
+    let cancelled = false;
+    api
+      .readSkill(entry.path)
+      .then((b) => {
+        if (cancelled) return;
+        SKILL_BODY_CACHE.set(entry.path, b);
+        setBody(b);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        SKILL_BODY_CACHE.set(entry.path, "");
+        setBody("");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [entry?.path]);
+
+  if (!entry) {
+    return (
+      <aside className="preview-pane">
+        <div className="preview-empty">No selection</div>
+      </aside>
+    );
+  }
+  return (
+    <aside className="preview-pane skill-preview">
+      <div className="preview-meta">
+        <div className="preview-name" title={entry.name}>
+          {entry.name}
+        </div>
+        <div className="preview-sub">
+          {entry.source === "user" ? "Personal skill" : `Plugin · ${entry.source}`}
+        </div>
+        {entry.description && (
+          <div className="skill-description">{entry.description}</div>
+        )}
+      </div>
+      <div className="skill-body">
+        {body === null ? (
+          <div className="preview-empty">Loading…</div>
+        ) : body === "" ? (
+          <div className="preview-empty">(empty body)</div>
+        ) : (
+          <pre>{body}</pre>
+        )}
+      </div>
+    </aside>
+  );
+}
+
+const SKILL_BODY_CACHE = new Map<string, string>();
 
 // Lazy thumbnail loader for image files. Mirrors the AppIcon cache so we
 // only round-trip to Rust once per path; failures stick (no infinite retry).
@@ -1374,6 +1532,20 @@ function FileGlyph() {
     <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
       <path
         d="M3.5 2.5 L9 2.5 L12.5 6 L12.5 13.5 L3.5 13.5 Z M9 2.5 L9 6 L12.5 6"
+        stroke="currentColor"
+        strokeWidth="1.3"
+        strokeLinejoin="round"
+        fill="none"
+      />
+    </svg>
+  );
+}
+function SkillGlyph() {
+  // Open book — skills are read like documentation.
+  return (
+    <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+      <path
+        d="M2 3 L8 4 L14 3 L14 13 L8 14 L2 13 Z M8 4 L8 14"
         stroke="currentColor"
         strokeWidth="1.3"
         strokeLinejoin="round"

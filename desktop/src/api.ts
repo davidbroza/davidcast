@@ -1,4 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
+import { relaunch } from "@tauri-apps/plugin-process";
+import { check, type Update } from "@tauri-apps/plugin-updater";
 import type {
   ClipboardEntry,
   Item,
@@ -13,7 +15,10 @@ import type {
 export interface Settings {
   show_vite_inline: boolean;
   show_docker_inline: boolean;
+  show_snippets_inline: boolean;
+  show_quicklinks_inline: boolean;
   screenshot_dirs: string[];
+  check_updates_on_launch: boolean;
 }
 
 export const api = {
@@ -23,8 +28,22 @@ export const api = {
     invoke<void>("set_show_vite_inline", { value }),
   setShowDockerInline: (value: boolean) =>
     invoke<void>("set_show_docker_inline", { value }),
+  setShowSnippetsInline: (value: boolean) =>
+    invoke<void>("set_show_snippets_inline", { value }),
+  setShowQuicklinksInline: (value: boolean) =>
+    invoke<void>("set_show_quicklinks_inline", { value }),
   setScreenshotDirs: (value: string[]) =>
     invoke<void>("set_screenshot_dirs", { value }),
+  setCheckUpdatesOnLaunch: (value: boolean) =>
+    invoke<void>("set_check_updates_on_launch", { value }),
+
+  // Updater — talks to the GitHub Releases endpoint pinned in
+  // tauri.conf.json. `check()` returns null when there is no update.
+  checkForUpdate: () => check(),
+  installUpdateAndRelaunch: async (update: Update) => {
+    await update.downloadAndInstall();
+    await relaunch();
+  },
   searchScreenshots: (limit?: number) =>
     invoke<import("./types").FileEntry[]>("search_screenshots", { limit }),
 
@@ -37,6 +56,8 @@ export const api = {
     }),
   analyticsTail: (limit: number) =>
     invoke<unknown[]>("analytics_tail", { limit }),
+  analyticsSummary: () =>
+    invoke<import("./types").AnalyticsSummary>("analytics_summary"),
   analyticsClear: () => invoke<void>("analytics_clear"),
   analyticsLogPath: () => invoke<string | null>("analytics_log_path"),
 
@@ -129,6 +150,10 @@ export const api = {
   wmBottomHalf: () => invoke<void>("wm_bottom_half"),
   wmMaximize: () => invoke<void>("wm_maximize"),
   wmCenter: () => invoke<void>("wm_center"),
+
+  // Skills
+  listSkills: () => invoke<import("./types").SkillEntry[]>("list_skills"),
+  readSkill: (path: string) => invoke<string>("read_skill", { path }),
 
   // Themes
   listThemes: () => invoke<import("./types").Theme[]>("list_themes"),

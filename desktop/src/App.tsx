@@ -1,8 +1,13 @@
 import { listen } from "@tauri-apps/api/event";
 import { useCallback, useEffect, useState } from "react";
 import { api, type Settings } from "./api";
+import type { Update } from "@tauri-apps/plugin-updater";
+import { Analytics } from "./components/Analytics";
+import { Help } from "./components/Help";
 import { ItemForm } from "./components/ItemForm";
 import { Palette } from "./components/Palette";
+import { Preferences } from "./components/Preferences";
+import { UpdateBanner } from "./components/UpdateBanner";
 import { WorkspaceSwitcher } from "./components/WorkspaceSwitcher";
 import type { Item, PaletteEntry, Theme, Workspace } from "./types";
 
@@ -35,7 +40,10 @@ type View =
   | { kind: "palette" }
   | { kind: "create"; presetKind: "snippet" | "quicklink" }
   | { kind: "edit"; item: Item }
-  | { kind: "workspace-switcher" };
+  | { kind: "workspace-switcher" }
+  | { kind: "preferences" }
+  | { kind: "help" }
+  | { kind: "analytics" };
 
 type InitialFilter = PaletteEntry["kind"] | null;
 
@@ -46,8 +54,12 @@ export default function App() {
   const [settings, setSettings] = useState<Settings>({
     show_vite_inline: true,
     show_docker_inline: true,
+    show_snippets_inline: true,
+    show_quicklinks_inline: true,
     screenshot_dirs: [],
+    check_updates_on_launch: true,
   });
+  const [update, setUpdate] = useState<Update | null>(null);
   const [view, setView] = useState<View>({ kind: "palette" });
   const [error, setError] = useState<string | null>(null);
   const [initialFilter, setInitialFilter] = useState<InitialFilter>(null);
@@ -75,6 +87,37 @@ export default function App() {
     api.getActiveTheme().then(applyTheme).catch(() => {});
   }, []);
 
+  // Check for updates on launch, gated by user setting. Silent when no
+  // update or when the network is offline — manual "Check for Updates"
+  // command surfaces errors.
+  useEffect(() => {
+    if (!settings.check_updates_on_launch) return;
+    let cancelled = false;
+    api
+      .checkForUpdate()
+      .then((u) => {
+        if (cancelled || !u) return;
+        setUpdate(u);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [settings.check_updates_on_launch]);
+
+  const checkForUpdateNow = useCallback(async () => {
+    try {
+      const u = await api.checkForUpdate();
+      if (u) {
+        setUpdate(u);
+      } else {
+        setError(`You're up to date (v${import.meta.env.VITE_APP_VERSION ?? ""}).`);
+      }
+    } catch (e) {
+      setError(`Update check failed: ${e}`);
+    }
+  }, []);
+
   useEffect(() => {
     const offShow = listen("palette:show", () => {
       setView({ kind: "palette" });
@@ -96,9 +139,19 @@ export default function App() {
         .catch(() => {});
       refresh().catch((e) => setError(String(e)));
     });
+    // The tray menu's "Preferences…" item routes through the backend so
+    // it can show the main window first; then it fires this event to
+    // switch the view inside.
+    const offPrefs = listen("preferences:show", () => {
+      setView({ kind: "preferences" });
+      setError(null);
+      setInitialFilter(null);
+      refresh().catch((e) => setError(String(e)));
+    });
     return () => {
       offShow.then((fn) => fn());
       offClipboard.then((fn) => fn());
+      offPrefs.then((fn) => fn());
     };
   }, [refresh]);
 
@@ -123,12 +176,16 @@ export default function App() {
         setView({ kind: "create", presetKind: "quicklink" });
         break;
       case "open.preferences":
-        try {
-          await api.showPreferences();
-          await api.hidePalette();
-        } catch (e) {
-          setError(String(e));
-        }
+        setView({ kind: "preferences" });
+        break;
+      case "help.show":
+        setView({ kind: "help" });
+        break;
+      case "show.analytics":
+        setView({ kind: "analytics" });
+        break;
+      case "app.check_updates":
+        checkForUpdateNow();
         break;
       case "switch.workspace":
         setView({ kind: "workspace-switcher" });
@@ -219,6 +276,13 @@ export default function App() {
           />
         </>
       )}
+      {view.kind === "preferences" && (
+        <Preferences onClose={backToPalette} onError={setError} />
+      )}
+      {view.kind === "help" && <Help onClose={backToPalette} />}
+      {view.kind === "analytics" && (
+        <Analytics onClose={backToPalette} onError={setError} />
+      )}
       {error && (
         <div className="error-banner" role="alert">
           <span className="error-banner-text">{error}</span>
@@ -230,6 +294,13 @@ export default function App() {
             ✕
           </button>
         </div>
+      )}
+      {update && (
+        <UpdateBanner
+          update={update}
+          onDismiss={() => setUpdate(null)}
+          onError={setError}
+        />
       )}
     </>
   );

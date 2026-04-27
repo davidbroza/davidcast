@@ -116,6 +116,16 @@ export interface ClipboardEntry {
   char_count: number;
 }
 
+export interface SkillEntry {
+  id: string;
+  name: string;
+  description: string;
+  path: string;
+  source: string;
+  size: number;
+  modified_at: number;
+}
+
 export type Item =
   | ({ kind: "snippet" } & Snippet)
   | ({ kind: "quicklink" } & Quicklink);
@@ -130,7 +140,8 @@ export type PaletteEntry =
   | ({ kind: "docker" } & DockerEntry)
   | ({ kind: "file" } & FileEntry)
   | ({ kind: "theme" } & Theme)
-  | ({ kind: "clipboard" } & ClipboardEntry);
+  | ({ kind: "clipboard" } & ClipboardEntry)
+  | ({ kind: "skill" } & SkillEntry);
 
 export function isSnippet(i: Item | PaletteEntry): i is { kind: "snippet" } & Snippet {
   return i.kind === "snippet";
@@ -176,11 +187,31 @@ export function isClipboard(
   return i.kind === "clipboard";
 }
 
+export function isSkill(i: PaletteEntry): i is { kind: "skill" } & SkillEntry {
+  return i.kind === "skill";
+}
+
 export function asItem(e: PaletteEntry): Item | null {
   if (e.kind === "snippet") return { ...e };
   if (e.kind === "quicklink") return { ...e };
   return null;
 }
+
+export type AnalyticsSummary = {
+  log_path: string | null;
+  total_events: number;
+  opens: number;
+  executes: number;
+  no_results: number;
+  success_rate: number | null;
+  top_queries: { q: string; count: number }[];
+  top_items: { name: string; kind: string; count: number }[];
+  kind_breakdown: { kind: string; count: number }[];
+  daily_opens: { day: string; count: number }[];
+  avg_dwell_ms: number | null;
+  first_event_ts: number | null;
+  last_event_ts: number | null;
+};
 
 export function extractPlaceholders(url: string): string[] {
   const out: string[] = [];

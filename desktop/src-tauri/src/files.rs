@@ -40,6 +40,9 @@ pub struct FileSearchOpts {
 
 const DEFAULT_LIMIT: usize = 100;
 const IMAGE_EXTS: &[&str] = &["png", "jpg", "jpeg", "gif", "webp", "heic"];
+/// macOS screencapture writes .mov for screen recordings; users searching
+/// "screenshots" usually want those alongside still PNGs.
+const SCREENSHOT_VIDEO_EXTS: &[&str] = &["mov", "mp4"];
 const EXCLUDES: &[&str] = &[
     "node_modules",
     ".git",
@@ -61,6 +64,55 @@ pub fn default_roots() -> Vec<String> {
         .map(|s| home.join(s).to_string_lossy().to_string())
         .filter(|p| std::path::Path::new(p).exists())
         .collect()
+}
+
+/// Where macOS is currently saving screenshots. Reads
+/// `defaults read com.apple.screencapture location`; if that's unset, falls
+/// back to `~/Desktop` (the historical default) and `~/Screenshots` (Sonoma+
+/// default for some installs). Only existing directories are returned.
+pub fn default_screenshot_dirs() -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+
+    if let Ok(output) = std::process::Command::new("defaults")
+        .args(["read", "com.apple.screencapture", "location"])
+        .output()
+    {
+        if output.status.success() {
+            let s = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            if !s.is_empty() {
+                out.push(expand_tilde(&s));
+            }
+        }
+    }
+
+    if let Some(home) = dirs::home_dir() {
+        for sub in ["Screenshots", "Desktop"] {
+            let p = home.join(sub).to_string_lossy().to_string();
+            if !out.contains(&p) {
+                out.push(p);
+            }
+        }
+    }
+
+    out.into_iter()
+        .filter(|p| std::path::Path::new(p).exists())
+        .collect()
+}
+
+/// Expand a leading `~/` or bare `~` into the home directory. Idempotent
+/// for already-absolute paths.
+pub fn expand_tilde(p: &str) -> String {
+    if p == "~" {
+        return dirs::home_dir()
+            .map(|h| h.to_string_lossy().to_string())
+            .unwrap_or_else(|| p.to_string());
+    }
+    if let Some(rest) = p.strip_prefix("~/") {
+        if let Some(home) = dirs::home_dir() {
+            return home.join(rest).to_string_lossy().to_string();
+        }
+    }
+    p.to_string()
 }
 
 pub fn search(mut opts: FileSearchOpts) -> Vec<FileEntry> {
@@ -168,12 +220,20 @@ fn home_relative(p: &str) -> String {
 
 fn expand_extensions(exts: &[String], category: Option<&str>) -> Vec<String> {
     let mut out: Vec<String> = exts.iter().map(|s| s.to_lowercase()).collect();
-    if matches!(category, Some("image") | Some("img")) {
-        for &e in IMAGE_EXTS {
+    let mut add = |list: &[&str]| {
+        for &e in list {
             if !out.iter().any(|x| x == e) {
                 out.push(e.to_string());
             }
         }
+    };
+    match category {
+        Some("image") | Some("img") => add(IMAGE_EXTS),
+        Some("screenshot") => {
+            add(IMAGE_EXTS);
+            add(SCREENSHOT_VIDEO_EXTS);
+        }
+        _ => {}
     }
     out
 }
@@ -302,6 +362,23 @@ mod tests {
         if let Some(home) = dirs::home_dir() {
             let p = home.join("Desktop").to_string_lossy().to_string();
             assert!(home_relative(&p).starts_with("~/"));
+        }
+    }
+
+    #[test]
+    fn expand_screenshot_includes_video() {
+        let out = expand_extensions(&[], Some("screenshot"));
+        assert!(out.contains(&"png".to_string()));
+        assert!(out.contains(&"mov".to_string()));
+    }
+
+    #[test]
+    fn expand_tilde_resolves_home() {
+        if let Some(home) = dirs::home_dir() {
+            let h = home.to_string_lossy().to_string();
+            assert_eq!(expand_tilde("~"), h);
+            assert_eq!(expand_tilde("~/foo"), home.join("foo").to_string_lossy());
+            assert_eq!(expand_tilde("/abs/path"), "/abs/path");
         }
     }
 }
