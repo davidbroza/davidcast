@@ -354,6 +354,11 @@ export default function App() {
         break;
       // "Switch Theme" is handled inline by the Palette via kindFilter.
       // Nothing for App to do here.
+      case "fx.confetti":
+        // Manual confetti trigger. Imported lazily to avoid pulling
+        // it into the App bundle path where it isn't otherwise used.
+        import("./confetti").then(({ fireConfetti }) => fireConfetti({ count: 200 }));
+        break;
     }
   }
 

@@ -131,6 +131,12 @@ export type Item =
   | ({ kind: "snippet" } & Snippet)
   | ({ kind: "quicklink" } & Quicklink);
 
+export interface CalcEntry {
+  id: string;
+  expr: string;
+  result: string;
+}
+
 export type PaletteEntry =
   | ({ kind: "command" } & CommandEntry)
   | ({ kind: "snippet" } & Snippet)
@@ -142,7 +148,8 @@ export type PaletteEntry =
   | ({ kind: "file" } & FileEntry)
   | ({ kind: "theme" } & Theme)
   | ({ kind: "clipboard" } & ClipboardEntry)
-  | ({ kind: "skill" } & SkillEntry);
+  | ({ kind: "skill" } & SkillEntry)
+  | ({ kind: "calc" } & CalcEntry);
 
 export function isSnippet(i: Item | PaletteEntry): i is { kind: "snippet" } & Snippet {
   return i.kind === "snippet";
@@ -192,6 +199,10 @@ export function isSkill(i: PaletteEntry): i is { kind: "skill" } & SkillEntry {
   return i.kind === "skill";
 }
 
+export function isCalc(i: PaletteEntry): i is { kind: "calc" } & CalcEntry {
+  return i.kind === "calc";
+}
+
 export function asItem(e: PaletteEntry): Item | null {
   if (e.kind === "snippet") return { ...e };
   if (e.kind === "quicklink") return { ...e };
@@ -228,6 +239,8 @@ export function stableEntryKey(e: PaletteEntry): string {
       return `t:${e.id}`;
     case "skill":
       return `sk:${e.path}`;
+    case "calc":
+      return `calc:${e.expr}`;
   }
 }
 

@@ -122,6 +122,9 @@ fn builtin() -> Vec<Theme> {
         star_wars_theme(),
         stargate_theme(),
         red_dwarf_theme(),
+        // Game tributes.
+        pokemon_theme(),
+        doom_theme(),
     ]
 }
 
@@ -827,7 +830,8 @@ fn matrix_theme() -> Theme {
 
 fn lcars_theme() -> Theme {
     // Star Trek: TNG bridge UI. Black bg, peach/orange/lilac blocks,
-    // condensed Helvetica. Make it so.
+    // condensed Helvetica. Make it so. Cyberpunky scanline overlay
+    // + radial accent glow give the TNG-bridge holographic feel.
     Theme {
         id: "lcars".into(),
         name: "LCARS (Star Trek)".into(),
@@ -835,12 +839,13 @@ fn lcars_theme() -> Theme {
         tokens: tokens! {
             "bg" => "rgba(0, 0, 0, 0.97)",
             "bg-solid" => "#000000",
+            "bg-image" => "radial-gradient(ellipse at top left, rgba(255, 153, 0, 0.18), transparent 55%), radial-gradient(ellipse at bottom right, rgba(204, 102, 153, 0.15), transparent 55%), repeating-linear-gradient(0deg, rgba(255, 153, 0, 0.04) 0 1px, transparent 1px 3px)",
             "bg-row" => "transparent",
             "bg-row-active" => "rgba(255, 153, 0, 0.22)",
             "fg" => "#ff9966",
             "fg-dim" => "#cc99cc",
             "fg-faint" => "#996699",
-            "border" => "rgba(255, 153, 0, 0.40)",
+            "border" => "#ff9900",
             "accent" => "#ff9900",
             "danger" => "#cc6666",
             "badge-snippet" => "#99ccff",
@@ -850,7 +855,7 @@ fn lcars_theme() -> Theme {
             "badge-vite" => "#ffcc66",
             "badge-docker" => "#99ccff",
             "badge-logs" => "#996699",
-            "shadow" => "0 0 0 2px #ff9900, 0 28px 80px rgba(0, 0, 0, 0.7)",
+            "shadow" => "0 28px 80px rgba(0, 0, 0, 0.7), 0 0 60px rgba(255, 153, 0, 0.20)",
             "font-family" => "\"Helvetica Neue\", \"Helvetica\", Impact, sans-serif",
             "font-family-mono" => FONT_MONO,
         },
@@ -859,7 +864,7 @@ fn lcars_theme() -> Theme {
 
 fn star_wars_theme() -> Theme {
     // Opening crawl: Lucasfilm yellow #FFE81F on the deepest space black.
-    // Lightsaber accents on badges.
+    // Lightsaber accents on badges. Starfield gradient sells the crawl.
     Theme {
         id: "star-wars".into(),
         name: "Star Wars (Crawl)".into(),
@@ -867,6 +872,7 @@ fn star_wars_theme() -> Theme {
         tokens: tokens! {
             "bg" => "rgba(0, 0, 8, 0.98)",
             "bg-solid" => "#000008",
+            "bg-image" => "radial-gradient(ellipse at center top, rgba(255, 232, 31, 0.10), transparent 60%), radial-gradient(circle at 20% 80%, rgba(77, 217, 255, 0.06), transparent 35%), radial-gradient(circle at 80% 30%, rgba(255, 56, 56, 0.05), transparent 35%)",
             "bg-row" => "transparent",
             "bg-row-active" => "rgba(255, 232, 31, 0.18)",
             "fg" => "#ffe81f",
@@ -891,7 +897,7 @@ fn star_wars_theme() -> Theme {
 
 fn stargate_theme() -> Theme {
     // Event-horizon blue + Egyptian bronze on deep navy. Chevron seven,
-    // locked.
+    // locked. Hieroglyph radial pulse for the gate-pool effect.
     Theme {
         id: "stargate".into(),
         name: "Stargate".into(),
@@ -899,6 +905,7 @@ fn stargate_theme() -> Theme {
         tokens: tokens! {
             "bg" => "rgba(10, 18, 32, 0.96)",
             "bg-solid" => "#0a1220",
+            "bg-image" => "radial-gradient(ellipse at center, rgba(77, 196, 255, 0.18), transparent 50%), conic-gradient(from 90deg at 50% 50%, rgba(221, 184, 104, 0.06), rgba(77, 196, 255, 0.04), rgba(221, 184, 104, 0.06))",
             "bg-row" => "transparent",
             "bg-row-active" => "rgba(77, 196, 255, 0.16)",
             "fg" => "#ddb868",
@@ -949,6 +956,72 @@ fn red_dwarf_theme() -> Theme {
             "shadow" => "0 0 0 2px rgba(255, 220, 70, 0.35), 0 28px 80px rgba(0, 0, 0, 0.7), 0 0 60px rgba(60, 6, 12, 0.5)",
             "font-family" => "\"Impact\", \"Helvetica Neue\", Helvetica, sans-serif",
             "font-family-mono" => FONT_MONO,
+        },
+    }
+}
+
+fn pokemon_theme() -> Theme {
+    // Red & Blue Game Boy era — pokeball red, pikachu yellow, soft cream
+    // dialog box. VT323 because all the original menus were bitmap.
+    Theme {
+        id: "pokemon".into(),
+        name: "Pokémon (R/B)".into(),
+        builtin: true,
+        tokens: tokens! {
+            "bg" => "rgba(255, 248, 232, 0.97)",
+            "bg-solid" => "#fff8e8",
+            "bg-image" => "radial-gradient(circle at 0% 0%, rgba(232, 28, 28, 0.10), transparent 40%), radial-gradient(circle at 100% 100%, rgba(60, 88, 168, 0.10), transparent 40%)",
+            "bg-row" => "transparent",
+            "bg-row-active" => "rgba(232, 28, 28, 0.18)",
+            "fg" => "#1c1c24",
+            "fg-dim" => "#5a5a64",
+            "fg-faint" => "#a8a8b0",
+            "border" => "#1c1c24",
+            "accent" => "#e81c1c",
+            "danger" => "#3c58a8",
+            "badge-snippet" => "#3c58a8",
+            "badge-quicklink" => "#e81c1c",
+            "badge-clipboard" => "#f0c020",
+            "badge-agent" => "#58a830",
+            "badge-vite" => "#f0c020",
+            "badge-docker" => "#3c58a8",
+            "badge-logs" => "#5a5a64",
+            "shadow" => "0 0 0 3px #1c1c24, 0 0 0 6px #fff8e8, 0 0 0 9px #1c1c24, 0 28px 80px rgba(0, 0, 0, 0.4)",
+            "font-family" => FONT_TERMINAL,
+            "font-family-mono" => FONT_TERMINAL,
+        },
+    }
+}
+
+fn doom_theme() -> Theme {
+    // E1M1 status bar: blood red, brown, the kind of green that says
+    // "armor pickup". Heavy, mean, monospaced.
+    Theme {
+        id: "doom".into(),
+        name: "DOOM".into(),
+        builtin: true,
+        tokens: tokens! {
+            "bg" => "rgba(20, 8, 8, 0.97)",
+            "bg-solid" => "#140808",
+            "bg-image" => "radial-gradient(ellipse at center, rgba(255, 68, 0, 0.18), transparent 55%), radial-gradient(circle at 20% 100%, rgba(180, 30, 0, 0.20), transparent 50%), repeating-linear-gradient(45deg, rgba(80, 20, 0, 0.06) 0 2px, transparent 2px 8px)",
+            "bg-row" => "transparent",
+            "bg-row-active" => "rgba(255, 68, 0, 0.22)",
+            "fg" => "#ff6633",
+            "fg-dim" => "#a04020",
+            "fg-faint" => "#5a2410",
+            "border" => "rgba(255, 68, 0, 0.35)",
+            "accent" => "#ff4400",
+            "danger" => "#ffd700",
+            "badge-snippet" => "#ff8844",
+            "badge-quicklink" => "#ffd700",
+            "badge-clipboard" => "#a04020",
+            "badge-agent" => "#ff4400",
+            "badge-vite" => "#ffd700",
+            "badge-docker" => "#88aa44",
+            "badge-logs" => "#a04020",
+            "shadow" => "0 0 0 1px rgba(255, 68, 0, 0.50), 0 28px 80px rgba(0, 0, 0, 0.85), 0 0 80px rgba(255, 68, 0, 0.30)",
+            "font-family" => "Impact, \"Helvetica Neue\", \"Arial Black\", sans-serif",
+            "font-family-mono" => FONT_TERMINAL,
         },
     }
 }

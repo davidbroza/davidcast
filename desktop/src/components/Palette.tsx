@@ -17,6 +17,7 @@ import {
   extractPlaceholders,
   isAgent,
   isApp,
+  isCalc,
   isClipboard,
   isCommand,
   isDocker,
@@ -29,6 +30,7 @@ import {
 } from "../types";
 import type { FileSearchOpts } from "../types";
 import { applyTheme } from "../App";
+import { evaluateMath } from "../calc";
 import { fireConfetti } from "../confetti";
 import { r2, scheduleIdle } from "../utils";
 
@@ -397,7 +399,7 @@ export function Palette({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visibleEntries]);
 
-  const filtered = useMemo(() => {
+  const baseFiltered = useMemo(() => {
     // File mode is fully resolved by the backend (fd does the matching);
     // skip Fuse entirely so we don't filter the results twice.
     if (kindFilter === "file") return visibleEntries.slice(0, MAX_VISIBLE);
@@ -474,6 +476,21 @@ export function Palette({
     return scored.slice(0, MAX_VISIBLE).map((r) => r.item);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [deferredQuery, visibleEntries, kindFilter]);
+
+  // Calculator row — when the query parses as a math expression, surface
+  // the result at the top of the list. Pure frontend, never network.
+  const filtered = useMemo<PaletteEntry[]>(() => {
+    if (kindFilter) return baseFiltered; // don't intrude into a filter chip
+    const calc = evaluateMath(deferredQuery);
+    if (!calc) return baseFiltered;
+    const row: PaletteEntry = {
+      kind: "calc",
+      id: `calc:${calc.expr}`,
+      expr: calc.expr,
+      result: calc.result,
+    };
+    return [row, ...baseFiltered];
+  }, [baseFiltered, deferredQuery, kindFilter]);
 
   // Two-part measurement:
   //   - input paint: time from keystroke to the input element committing
@@ -813,6 +830,17 @@ export function Palette({
         await api.copyFilePath(entry.path);
         setToast("Path copied");
         window.setTimeout(() => setToast(null), 700);
+      } else if (isCalc(entry)) {
+        // ↵ on a calc row copies the result and keeps the palette open
+        // so the user can iterate (refine the expression, copy again).
+        try {
+          await navigator.clipboard.writeText(entry.result);
+        } catch (e) {
+          throw new Error(`clipboard write failed: ${e}`);
+        }
+        setToast(`= ${entry.result} copied`);
+        window.setTimeout(() => setToast(null), 1100);
+        inputRef.current?.focus();
       }
     } catch (e) {
       success = false;
@@ -1247,6 +1275,8 @@ function kindPriority(e: PaletteEntry): number {
       return 9;
     case "clipboard":
       return 10;
+    case "calc":
+      return -1;
   }
 }
 
@@ -1300,6 +1330,8 @@ function filterLabel(k: PaletteEntry["kind"]): string {
       return "Themes";
     case "skill":
       return "Skills";
+    case "calc":
+      return "Calculator";
   }
 }
 
@@ -1409,6 +1441,10 @@ const Row = memo(function Row({
     name = entry.name;
     sub = entry.description || entry.path;
     badge = entry.source === "user" ? "Skill" : `Skill · ${entry.source}`;
+  } else if (isCalc(entry)) {
+    name = `= ${entry.result}`;
+    sub = `${entry.expr} — ↵ to copy`;
+    badge = "Calc";
   }
 
   const keyword =
@@ -1508,6 +1544,13 @@ function EntryIcon({ entry }: { entry: PaletteEntry }) {
     return (
       <div className="row-icon glyph skill">
         <SkillGlyph />
+      </div>
+    );
+  }
+  if (isCalc(entry)) {
+    return (
+      <div className="row-icon glyph calc" aria-hidden>
+        =
       </div>
     );
   }

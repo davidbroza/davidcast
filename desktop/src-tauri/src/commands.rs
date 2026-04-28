@@ -816,6 +816,11 @@ fn builtin_commands() -> Vec<CommandEntry> {
             name: "Switch Workspace".into(),
             subtitle: "Change the active workspace".into(),
         },
+        CommandEntry {
+            id: "fx.confetti".into(),
+            name: "🎉 Throw Confetti".into(),
+            subtitle: "Because sometimes you just need a little win".into(),
+        },
     ]
 }
 
