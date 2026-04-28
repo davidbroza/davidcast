@@ -28,7 +28,11 @@ export function fireConfetti(opts?: { count?: number; origin?: { x: number; y: n
 
   const layer = document.createElement("div");
   layer.className = "confetti-layer";
-  document.body.appendChild(layer);
+  // Append to <html>, NOT <body>: body has overflow:hidden + a rounded
+  // clip mask (so the rounded palette renders cleanly), which clips any
+  // fixed-positioned child of body. Putting the layer on documentElement
+  // escapes that mask so the particles can travel the full window.
+  document.documentElement.appendChild(layer);
 
   const pieces: HTMLDivElement[] = [];
   for (let i = 0; i < count; i++) {

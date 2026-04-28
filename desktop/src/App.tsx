@@ -2,6 +2,7 @@ import { listen } from "@tauri-apps/api/event";
 import { ask } from "@tauri-apps/plugin-dialog";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, type Settings } from "./api";
+import { fireConfetti } from "./confetti";
 import type { Update } from "@tauri-apps/plugin-updater";
 import { r2, scheduleIdle } from "./utils";
 import { Analytics } from "./components/Analytics";
@@ -355,9 +356,10 @@ export default function App() {
       // "Switch Theme" is handled inline by the Palette via kindFilter.
       // Nothing for App to do here.
       case "fx.confetti":
-        // Manual confetti trigger. Imported lazily to avoid pulling
-        // it into the App bundle path where it isn't otherwise used.
-        import("./confetti").then(({ fireConfetti }) => fireConfetti({ count: 200 }));
+        // Manual confetti trigger. Imported statically so the trigger
+        // is synchronous — dynamic imports added a frame's delay that
+        // was masking the burst behind the palette dismiss in some flows.
+        fireConfetti({ count: 200 });
         break;
     }
   }
