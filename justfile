@@ -17,6 +17,10 @@ install:
     }
     cd desktop && pnpm install --frozen-lockfile
     cd desktop && TAURI_SIGNING_PRIVATE_KEY="$(cat {{SIGNING_KEY}})" TAURI_SIGNING_PRIVATE_KEY_PASSWORD="" pnpm tauri build
+    # Patch Info.plist with LSUIElement=true so the palette can float
+    # over fullscreen apps. Tauri's bundler doesn't expose this key.
+    plutil -replace LSUIElement -bool YES desktop/src-tauri/target/release/bundle/macos/davidcast.app/Contents/Info.plist 2>/dev/null || \
+        plutil -insert LSUIElement -bool YES desktop/src-tauri/target/release/bundle/macos/davidcast.app/Contents/Info.plist
     -killall davidcast 2>/dev/null || true
     rm -rf /Applications/davidcast.app
     cp -R desktop/src-tauri/target/release/bundle/macos/davidcast.app /Applications/

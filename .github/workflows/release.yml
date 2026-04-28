@@ -65,6 +65,22 @@ jobs:
         working-directory: desktop
         run: pnpm tauri build --target x86_64-apple-darwin
 
+      # Patch Info.plist with LSUIElement=true so the palette can float
+      # over fullscreen apps. Tauri's bundler doesn't expose this key in
+      # tauri.conf.json (yet), so we plutil-insert it after the bundle is
+      # built but before tarballing/signing — the .app.tar.gz signature
+      # is then over the patched bundle.
+      - name: Patch Info.plist (LSUIElement)
+        run: |
+          set -euo pipefail
+          for arch in aarch64 x86_64; do
+            target_dir=$([[ "$arch" == "aarch64" ]] && echo aarch64-apple-darwin || echo x86_64-apple-darwin)
+            plist="desktop/src-tauri/target/${target_dir}/release/bundle/macos/davidcast.app/Contents/Info.plist"
+            plutil -insert LSUIElement -bool YES "$plist" || \
+              plutil -replace LSUIElement -bool YES "$plist"
+            echo "Patched: $plist"
+          done
+
       # Tarball each .app and sign the tarball — the .sig contents go into
       # latest.json so the updater plugin can verify the download.
       - name: Package + sign + write latest.json
