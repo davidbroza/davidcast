@@ -196,6 +196,11 @@ html[data-theme="lcars"] .topbar::after {
   color: #000;
   pointer-events: none;
 }
+html[data-theme="lcars"] .search {
+  /* Drop the divider line under the search input — LCARS doesn't use
+   * hairline rules; the endcap and the row borders carry the structure. */
+  border-bottom: none;
+}
 html[data-theme="lcars"] .row.active {
   border-left: 4px solid var(--accent);
   padding-left: 10px;

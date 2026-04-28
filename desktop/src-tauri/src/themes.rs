@@ -125,6 +125,7 @@ fn builtin() -> Vec<Theme> {
         // Game tributes.
         pokemon_theme(),
         doom_theme(),
+        gta_v_theme(),
     ]
 }
 
@@ -1022,6 +1023,40 @@ fn doom_theme() -> Theme {
             "shadow" => "0 0 0 1px rgba(255, 68, 0, 0.50), 0 28px 80px rgba(0, 0, 0, 0.85), 0 0 80px rgba(255, 68, 0, 0.30)",
             "font-family" => "Impact, \"Helvetica Neue\", \"Arial Black\", sans-serif",
             "font-family-mono" => FONT_TERMINAL,
+        },
+    }
+}
+
+fn gta_v_theme() -> Theme {
+    // GTA V — Los Santos sunset. Vinewood-yellow on a sun-bleached
+    // navy/peach gradient. Pricedown is proprietary; Impact + Helvetica
+    // condensed approximates the HUD vibe.
+    Theme {
+        id: "gta-v".into(),
+        name: "GTA V (Los Santos)".into(),
+        builtin: true,
+        tokens: tokens! {
+            "bg" => "rgba(20, 16, 32, 0.96)",
+            "bg-solid" => "#141020",
+            "bg-image" => "linear-gradient(180deg, rgba(255, 153, 51, 0.18) 0%, rgba(255, 64, 128, 0.10) 30%, transparent 60%), radial-gradient(ellipse at 80% 100%, rgba(255, 200, 100, 0.20), transparent 55%), radial-gradient(ellipse at 20% 0%, rgba(180, 80, 220, 0.12), transparent 50%)",
+            "bg-row" => "transparent",
+            "bg-row-active" => "rgba(252, 209, 22, 0.18)",
+            "fg" => "#fff5d6",
+            "fg-dim" => "#c9a85a",
+            "fg-faint" => "#7a6030",
+            "border" => "rgba(252, 209, 22, 0.30)",
+            "accent" => "#fcd116",
+            "danger" => "#ff3860",
+            "badge-snippet" => "#3aa8ff",
+            "badge-quicklink" => "#ff3860",
+            "badge-clipboard" => "#ff9933",
+            "badge-agent" => "#9b5cff",
+            "badge-vite" => "#fcd116",
+            "badge-docker" => "#3aa8ff",
+            "badge-logs" => "#c9a85a",
+            "shadow" => "0 28px 80px rgba(0, 0, 0, 0.7), 0 0 80px rgba(252, 209, 22, 0.18)",
+            "font-family" => "Impact, \"Helvetica Neue\", \"Arial Black\", sans-serif",
+            "font-family-mono" => FONT_MONO,
         },
     }
 }
