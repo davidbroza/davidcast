@@ -58,6 +58,12 @@ Also: I wanted to learn Tauri 2. This is the project I built to do it.
 | **Clipboard history** | Background watcher; `⌘⇧V` opens the history filter directly. |
 | **Smart ranking** | Empty-query view sorts by recents (24-item localStorage cap) → kind priority → alphabetical. Typed queries get a `-0.4` prefix bonus and `-0.18` recents bonus on top of Fuse's score, so `i` lands on iTerm. |
 | **Local analytics** | Append-only JSONL at `~/Library/Application Support/davidcast/analytics.jsonl` — `open`, `execute` (with kind, success, duration, query, result count), `no_results` (debounced). Local-only, never leaves the box. |
+| **Window management** | `wm.left` / `right` / `top` / `bottom` / `maximize` / `center` move the frontmost (non-davidcast) window via osascript with the standard hide-then-act trick — Raycast halves without paying for Raycast. |
+| **System quick actions** | Lock / Sleep / Empty Trash / Restart / Shut Down / Log Out — the macOS power menu, two keystrokes away. |
+| **System stats** | CPU load, memory pressure, free disk, battery percentage and thermal state — a live status panel without opening Activity Monitor. |
+| **Skills browser** | `skills.search` browses Claude Code SKILL.md files under `~/.claude/skills` (personal) and installed plugin caches. Side preview shows the markdown body; `↵` copies the path, `⌘⇧C` copies the full skill. |
+| **Themes** | 20+ built-ins — Default, Pixel (8-bit), Solarized Dark/Light, Synthwave '84, Gameboy DMG, Matrix, Hot Dog Stand, Comic Sans, Dracula, Nord, Tokyo Night, Gruvbox, Cyberpunk, Brutalist, Bubblegum, Newsprint, Vaporwave… Live preview on hover. Drop your own JSON into `~/.../davidcast/themes/`. |
+| **Sensitive snippets** | Snippets carry a `sensitive` flag — pink-glow rows, masked editor, body never renders in the palette subtitle so screen-sharing stays safe. |
 | **Built-in commands** | "Create Snippet", "Create Quicklink", "Show X" filter chips for Vite / Docker / Agents / Clipboard, "Find Files", "Find Screenshots", "Preferences", "Switch Workspace" — all searchable like items. |
 | **Workspaces** | Isolated namespaces. Personal / work / anything. Each has its own snippets and quicklinks on disk. |
 | **Menu-bar only** | No dock icon. Tray menu for when you've forgotten the hotkey. |
@@ -343,7 +349,29 @@ Working tree = the data dir; the `.git` is tucked away at `~/Library/Application
 
 ### Themes
 
-Built-in themes ship in the binary. To add your own, drop a JSON in `themes/`:
+20+ themes ship built in. Pick `themes.switch` in the palette and arrow through them — every row **live-previews on hover**, so you can scrub the look without committing.
+
+<p align="center">
+  <img src="docs/assets/themes/themes-grid.png" alt="Eight davidcast themes — Default Dark, Pixel 8-bit, Solarized Dark, Synthwave '84, Gameboy DMG, Matrix, Hot Dog Stand, Comic Sans" width="900" />
+</p>
+
+| Theme | Vibe |
+|---|---|
+| **Default Dark** | Soft slate background, blue accents, system-font sans-serif. The quiet one most people stop on. |
+| **Pixel — 8-bit** | Press Start 2P everywhere, chunky pixel rows, warm CRT yellow. Reads like a NES menu — keyboard hints render in 8-bit too. |
+| **Solarized Dark / Light** | Ethan Schoonover's classic palette, exact base16 hex values. The one your terminal already runs. |
+| **Synthwave '84** | Magenta-on-purple with neon glow on the focused row. Pairs well with `dark sun` wallpaper and zero deadlines. |
+| **Gameboy DMG** | Pea-green LCD, four shades, "Early GameBoy" bitmap font. Type `iter` and squint. |
+| **Matrix** | Pure black, three shades of `#00FF41`, monospace stack. Looks like the screensaver, works like a launcher. |
+| **Hot Dog Stand** | Windows 3.1's worst color scheme, faithfully ported. Yellow background, red title bar. Use to repel coworkers. |
+| **Comic Sans (please don't)** | Comic Sans MS at every size. The theme registry has no taste, and that is fine. |
+| _and more…_ | Dracula, Nord, Tokyo Night, Gruvbox, Cyberpunk, Brutalist, Bubblegum, Newsprint, Vaporwave, Hacker (Green on Black), Retro Amber CRT, Nerd (JetBrains Mono), High Contrast, Light. |
+
+Themes are full visual identities — colour tokens, font family, corner radius, badge pills and keyboard-hint typography all wired through CSS custom properties on the document root.
+
+#### Custom themes
+
+Drop a JSON file into `~/Library/Application Support/davidcast/themes/`. It shows up in `themes.switch` on next launch — same shape as the built-ins:
 
 ```jsonc
 {
@@ -351,14 +379,21 @@ Built-in themes ship in the binary. To add your own, drop a JSON in `themes/`:
   "name": "Midnight",
   "tokens": {
     "bg": "#0F0E2E",
+    "bg-solid": "#0F0E2E",
     "fg": "#E8E8EA",
-    "accent": "#818CF8"
-    /* …any --css-var name from palette.css… */
+    "fg-dim": "#9A98C8",
+    "border": "#2A2848",
+    "accent": "#818CF8",
+    "font-family": "'JetBrains Mono', monospace",
+    "font-family-mono": "'JetBrains Mono', monospace"
+    /* …any token name from the built-ins in desktop/src-tauri/src/themes.rs… */
   }
 }
 ```
 
-`themes.switch` lists everything (built-ins + your folder), and the choice is persisted as `config.theme`.
+Each token becomes a CSS custom property at the document root (`--bg`, `--fg`, etc.). See `desktop/src/palette.css` for the full list of vars the UI consumes.
+
+`themes.switch` lists everything (built-ins + your folder), and the choice is persisted as `config.theme` in `config.json`.
 
 ## Repo layout
 
