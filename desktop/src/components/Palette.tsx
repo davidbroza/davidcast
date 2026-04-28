@@ -29,13 +29,25 @@ type KindFilter = PaletteEntry["kind"] | null;
 const RECENTS_KEY = "davidcast.recents";
 const MAX_RECENTS = 24;
 
+// Hard cap on rows handed to the renderer. Past ~80 you can't see them
+// anyway, and React reconciling 300+ rows with SVG glyphs + AppIcon
+// effects on every keystroke is a measurable hit on first-letter latency.
+const MAX_VISIBLE = 80;
+
+// Module-level cache so we don't JSON.parse localStorage on every keystroke.
+// touchRecent is the only writer in the app, so cache invalidation is just
+// "update both sides whenever we write."
+let recentsCache: Record<string, number> | null = null;
+
 function loadRecents(): Record<string, number> {
+  if (recentsCache) return recentsCache;
   try {
     const v = localStorage.getItem(RECENTS_KEY);
-    return v ? JSON.parse(v) : {};
+    recentsCache = v ? JSON.parse(v) : {};
   } catch {
-    return {};
+    recentsCache = {};
   }
+  return recentsCache!;
 }
 
 /// Parse the file-mode query into structured search options.
@@ -78,7 +90,7 @@ function parseFileQuery(input: string): FileSearchOpts {
 }
 
 function touchRecent(key: string) {
-  const map = loadRecents();
+  const map = { ...loadRecents() };
   map[key] = Date.now();
   // Keep only the most recent MAX_RECENTS so this never grows unbounded.
   const trimmed = Object.fromEntries(
@@ -86,6 +98,7 @@ function touchRecent(key: string) {
       .sort(([, a], [, b]) => b - a)
       .slice(0, MAX_RECENTS)
   );
+  recentsCache = trimmed;
   try {
     localStorage.setItem(RECENTS_KEY, JSON.stringify(trimmed));
   } catch {
@@ -274,14 +287,14 @@ export function Palette({
   const filtered = useMemo(() => {
     // File mode is fully resolved by the backend (fd does the matching);
     // skip Fuse entirely so we don't filter the results twice.
-    if (kindFilter === "file") return visibleEntries;
+    if (kindFilter === "file") return visibleEntries.slice(0, MAX_VISIBLE);
     const q = query.trim();
+    const recents = loadRecents();
     if (!q) {
       // Empty query order:
       //   1) recents — what you actually use, newest first
       //   2) kind priority — apps > your items > plugins > clipboard
       //   3) alphabetical name — predictable tiebreaker
-      const recents = loadRecents();
       const ranked = [...visibleEntries];
       ranked.sort((a, b) => {
         const ra = recents[entryKey(a)] ?? 0;
@@ -292,7 +305,34 @@ export function Palette({
         if (pa !== pb) return pa - pb;
         return nameOf(a).localeCompare(nameOf(b));
       });
-      return ranked;
+      return ranked.slice(0, MAX_VISIBLE);
+    }
+    const ql = q.toLowerCase();
+    // Short queries: skip Fuse entirely. With threshold 0.35 + ignoreLocation
+    // and 11 weighted keys, scoring every entry against a 1-char query is the
+    // dominant cost of first-letter latency — and the result is mostly noise
+    // (substring hits with weak scores). For 1-2 chars, what the user actually
+    // wants is "starts-with on name or keyword", which is O(n) and trivial.
+    if (q.length <= 2) {
+      const matches: PaletteEntry[] = [];
+      for (const e of visibleEntries) {
+        if (nameOf(e).toLowerCase().startsWith(ql)) {
+          matches.push(e);
+          continue;
+        }
+        const kw = (e as { keyword?: string }).keyword;
+        if (kw && kw.toLowerCase().startsWith(ql)) matches.push(e);
+      }
+      matches.sort((a, b) => {
+        const ra = recents[entryKey(a)] ?? 0;
+        const rb = recents[entryKey(b)] ?? 0;
+        if (ra !== rb) return rb - ra;
+        const pa = kindPriority(a);
+        const pb = kindPriority(b);
+        if (pa !== pb) return pa - pb;
+        return nameOf(a).localeCompare(nameOf(b));
+      });
+      return matches.slice(0, MAX_VISIBLE);
     }
     const results = fuse.search(q);
     // Adjust Fuse's raw match score with two boosts:
@@ -301,8 +341,6 @@ export function Palette({
     //   - recents bonus: gentler (-0.18) — what you actually use beats
     //     equally-good matches you've never picked.
     // Lower effective score = better, same as Fuse.
-    const recents = loadRecents();
-    const ql = q.toLowerCase();
     const scored = results.map((r) => {
       const item = r.item;
       let score = r.score ?? 1;
@@ -320,7 +358,7 @@ export function Palette({
       if (pa !== pb) return pa - pb;
       return nameOf(a.item).localeCompare(nameOf(b.item));
     });
-    return scored.map((r) => r.item);
+    return scored.slice(0, MAX_VISIBLE).map((r) => r.item);
   }, [query, fuse, visibleEntries, kindFilter]);
 
   useEffect(() => {
