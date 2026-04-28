@@ -44,6 +44,11 @@
   --badge-logs: #8aa2b8;
   --font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
   --font-family-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+  /* Theme-tunable font sizes. Themes that pick a chunky font (e.g. the
+   * Pixel theme using Press Start 2P) override these so glyphs don't
+   * overflow rows. */
+  --font-size-base: 14px;
+  --font-size-input: 18px;
 }
 
 * {
@@ -57,7 +62,7 @@ html, body, #root {
   background: transparent;
   color: var(--fg);
   font-family: var(--font-family);
-  font-size: 14px;
+  font-size: var(--font-size-base);
   overflow: hidden;
   user-select: none;
   -webkit-user-select: none;
@@ -140,7 +145,7 @@ body[data-view="palette"] {
   border: none;
   outline: none;
   color: var(--fg);
-  font-size: 18px;
+  font-size: var(--font-size-input);
   font-weight: 300;
   padding: 4px 0;
 }

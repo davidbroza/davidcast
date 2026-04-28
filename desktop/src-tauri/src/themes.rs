@@ -106,6 +106,17 @@ fn builtin() -> Vec<Theme> {
         retro_amber_theme(),
         pixel_theme(),
         nerd_theme(),
+        // Weird ones — make `themes.switch` fun.
+        synthwave_theme(),
+        vaporwave_theme(),
+        gameboy_theme(),
+        hotdog_stand_theme(),
+        brutalist_theme(),
+        cyberpunk_theme(),
+        bubblegum_theme(),
+        newsprint_theme(),
+        matrix_theme(),
+        comic_sans_theme(),
     ]
 }
 
@@ -484,10 +495,13 @@ fn pixel_theme() -> Theme {
             "badge-docker" => "#5cd1ff",
             "badge-logs" => "#9a8e58",
             "shadow" => "0 0 0 1px rgba(255, 220, 90, 0.25), 0 28px 80px rgba(0, 0, 0, 0.7)",
-            // Press Start 2P is *very* big at 14px — but the bundled glyphs
-            // are designed for that pixel grid, so we let the user feel it.
             "font-family" => FONT_PIXEL,
             "font-family-mono" => FONT_PIXEL,
+            // Press Start 2P glyphs sit on an 8×8 grid scaled up — they're
+            // huge at the default 14/18px. Shrinking the body + input keeps
+            // the chunky retro look without overflowing rows.
+            "font-size-base" => "10px",
+            "font-size-input" => "13px",
         },
     }
 }
@@ -520,6 +534,320 @@ fn nerd_theme() -> Theme {
             "shadow" => "0 28px 80px rgba(0, 0, 0, 0.6), 0 6px 18px rgba(0, 0, 0, 0.4)",
             "font-family" => FONT_NERD,
             "font-family-mono" => FONT_NERD,
+        },
+    }
+}
+
+// ---- Weird ones ----
+
+fn synthwave_theme() -> Theme {
+    // Neon-on-deep-purple, that '80s VHS / Retrowave Miami feel.
+    Theme {
+        id: "synthwave".into(),
+        name: "Synthwave '84".into(),
+        builtin: true,
+        tokens: tokens! {
+            "bg" => "rgba(34, 18, 60, 0.94)",
+            "bg-solid" => "#22123c",
+            "bg-row" => "transparent",
+            "bg-row-active" => "rgba(255, 113, 206, 0.20)",
+            "fg" => "#f8f8ff",
+            "fg-dim" => "#b9a3ff",
+            "fg-faint" => "#7a5fb6",
+            "border" => "rgba(255, 113, 206, 0.30)",
+            "accent" => "#fe6ad9",
+            "danger" => "#ff5277",
+            "badge-snippet" => "#01cdfe",
+            "badge-quicklink" => "#fe6ad9",
+            "badge-clipboard" => "#ffb86b",
+            "badge-agent" => "#bd93f9",
+            "badge-vite" => "#fff95b",
+            "badge-docker" => "#05ffa1",
+            "badge-logs" => "#7a5fb6",
+            "shadow" => "0 0 0 1px rgba(254, 106, 217, 0.35), 0 28px 80px rgba(20, 0, 40, 0.7), 0 0 60px rgba(1, 205, 254, 0.15)",
+            "font-family" => FONT_NERD,
+            "font-family-mono" => FONT_NERD,
+        },
+    }
+}
+
+fn vaporwave_theme() -> Theme {
+    Theme {
+        id: "vaporwave".into(),
+        name: "Vaporwave".into(),
+        builtin: true,
+        tokens: tokens! {
+            "bg" => "rgba(255, 230, 246, 0.94)",
+            "bg-solid" => "#ffe6f6",
+            "bg-row" => "transparent",
+            "bg-row-active" => "rgba(255, 113, 206, 0.18)",
+            "fg" => "#5a3070",
+            "fg-dim" => "#b486c4",
+            "fg-faint" => "#d9b3e6",
+            "border" => "rgba(255, 113, 206, 0.30)",
+            "accent" => "#ff71ce",
+            "danger" => "#ff4d6d",
+            "badge-snippet" => "#01cdfe",
+            "badge-quicklink" => "#b967ff",
+            "badge-clipboard" => "#ff9472",
+            "badge-agent" => "#b967ff",
+            "badge-vite" => "#fff95b",
+            "badge-docker" => "#05ffa1",
+            "badge-logs" => "#b486c4",
+            "shadow" => "0 0 0 1px rgba(185, 103, 255, 0.30), 0 28px 80px rgba(255, 113, 206, 0.30)",
+            "font-family" => FONT_SYSTEM,
+            "font-family-mono" => FONT_MONO,
+        },
+    }
+}
+
+fn gameboy_theme() -> Theme {
+    // Original DMG-01: 4 shades of swampy green. Uses the bundled VT323
+    // pixel font for full pocket-monster vibes.
+    Theme {
+        id: "gameboy".into(),
+        name: "Gameboy DMG".into(),
+        builtin: true,
+        tokens: tokens! {
+            "bg" => "rgba(155, 188, 15, 0.96)",
+            "bg-solid" => "#9bbc0f",
+            "bg-row" => "transparent",
+            "bg-row-active" => "rgba(15, 56, 15, 0.30)",
+            "fg" => "#0f380f",
+            "fg-dim" => "#306230",
+            "fg-faint" => "#578a34",
+            "border" => "rgba(15, 56, 15, 0.40)",
+            "accent" => "#0f380f",
+            "danger" => "#9c2c2c",
+            "badge-snippet" => "#306230",
+            "badge-quicklink" => "#0f380f",
+            "badge-clipboard" => "#578a34",
+            "badge-agent" => "#306230",
+            "badge-vite" => "#578a34",
+            "badge-docker" => "#306230",
+            "badge-logs" => "#578a34",
+            "shadow" => "0 0 0 2px #0f380f, 0 0 0 6px #8bac0f, 0 0 0 8px #0f380f",
+            "font-family" => FONT_TERMINAL,
+            "font-family-mono" => FONT_TERMINAL,
+        },
+    }
+}
+
+fn hotdog_stand_theme() -> Theme {
+    // The infamous Windows 3.1 "Hot Dog Stand" — yellow, red, black,
+    // assault on the eyeballs. Strictly for the bit.
+    Theme {
+        id: "hot-dog-stand".into(),
+        name: "Hot Dog Stand".into(),
+        builtin: true,
+        tokens: tokens! {
+            "bg" => "rgba(255, 255, 0, 0.98)",
+            "bg-solid" => "#ffff00",
+            "bg-row" => "transparent",
+            "bg-row-active" => "rgba(255, 0, 0, 0.30)",
+            "fg" => "#000000",
+            "fg-dim" => "#aa0000",
+            "fg-faint" => "#cc6600",
+            "border" => "rgba(255, 0, 0, 0.50)",
+            "accent" => "#ff0000",
+            "danger" => "#000000",
+            "badge-snippet" => "#ff0000",
+            "badge-quicklink" => "#000000",
+            "badge-clipboard" => "#aa0000",
+            "badge-agent" => "#ff6600",
+            "badge-vite" => "#ff0000",
+            "badge-docker" => "#000000",
+            "badge-logs" => "#aa0000",
+            "shadow" => "0 0 0 3px #ff0000, 0 0 0 6px #000000",
+            "font-family" => FONT_SYSTEM,
+            "font-family-mono" => FONT_MONO,
+        },
+    }
+}
+
+fn brutalist_theme() -> Theme {
+    // Pure b&w, hard edges, no shadow. Looks like raw HTML. On purpose.
+    Theme {
+        id: "brutalist".into(),
+        name: "Brutalist".into(),
+        builtin: true,
+        tokens: tokens! {
+            "bg" => "rgba(255, 255, 255, 1.0)",
+            "bg-solid" => "#ffffff",
+            "bg-row" => "transparent",
+            "bg-row-active" => "rgba(0, 0, 0, 1.0)",
+            "fg" => "#000000",
+            "fg-dim" => "#000000",
+            "fg-faint" => "#666666",
+            "border" => "rgba(0, 0, 0, 1.0)",
+            "accent" => "#000000",
+            "danger" => "#000000",
+            "badge-snippet" => "#000000",
+            "badge-quicklink" => "#000000",
+            "badge-clipboard" => "#000000",
+            "badge-agent" => "#000000",
+            "badge-vite" => "#000000",
+            "badge-docker" => "#000000",
+            "badge-logs" => "#000000",
+            "shadow" => "8px 8px 0 0 #000000",
+            "font-family" => FONT_NERD,
+            "font-family-mono" => FONT_NERD,
+        },
+    }
+}
+
+fn cyberpunk_theme() -> Theme {
+    // Neon yellow on near-black with magenta + cyan accents.
+    // 2077 vibes.
+    Theme {
+        id: "cyberpunk".into(),
+        name: "Cyberpunk".into(),
+        builtin: true,
+        tokens: tokens! {
+            "bg" => "rgba(8, 5, 20, 0.96)",
+            "bg-solid" => "#080514",
+            "bg-row" => "transparent",
+            "bg-row-active" => "rgba(255, 240, 0, 0.18)",
+            "fg" => "#fcee0a",
+            "fg-dim" => "#9a9000",
+            "fg-faint" => "#5a5400",
+            "border" => "rgba(252, 238, 10, 0.30)",
+            "accent" => "#00f0ff",
+            "danger" => "#ff003c",
+            "badge-snippet" => "#00f0ff",
+            "badge-quicklink" => "#ff00aa",
+            "badge-clipboard" => "#fcee0a",
+            "badge-agent" => "#ff00aa",
+            "badge-vite" => "#fcee0a",
+            "badge-docker" => "#00f0ff",
+            "badge-logs" => "#9a9000",
+            "shadow" => "0 0 0 1px rgba(252, 238, 10, 0.45), 0 28px 80px rgba(0, 240, 255, 0.20)",
+            "font-family" => FONT_NERD,
+            "font-family-mono" => FONT_NERD,
+        },
+    }
+}
+
+fn bubblegum_theme() -> Theme {
+    Theme {
+        id: "bubblegum".into(),
+        name: "Bubblegum".into(),
+        builtin: true,
+        tokens: tokens! {
+            "bg" => "rgba(255, 224, 240, 0.96)",
+            "bg-solid" => "#ffe0f0",
+            "bg-row" => "transparent",
+            "bg-row-active" => "rgba(255, 105, 180, 0.20)",
+            "fg" => "#7a2c5a",
+            "fg-dim" => "#b56a96",
+            "fg-faint" => "#d8a0c0",
+            "border" => "rgba(255, 105, 180, 0.30)",
+            "accent" => "#ff69b4",
+            "danger" => "#e0355a",
+            "badge-snippet" => "#5cb8ff",
+            "badge-quicklink" => "#ff69b4",
+            "badge-clipboard" => "#ffaa55",
+            "badge-agent" => "#cc66ff",
+            "badge-vite" => "#ffd66b",
+            "badge-docker" => "#5cd6c0",
+            "badge-logs" => "#b56a96",
+            "shadow" => "0 18px 48px rgba(255, 105, 180, 0.30), 0 4px 12px rgba(255, 105, 180, 0.20)",
+            "font-family" => FONT_SYSTEM,
+            "font-family-mono" => FONT_MONO,
+        },
+    }
+}
+
+fn newsprint_theme() -> Theme {
+    // Cream paper, ink black, generous serifs. "Times" is on every Mac.
+    Theme {
+        id: "newsprint".into(),
+        name: "Newsprint".into(),
+        builtin: true,
+        tokens: tokens! {
+            "bg" => "rgba(244, 236, 218, 0.98)",
+            "bg-solid" => "#f4ecda",
+            "bg-row" => "transparent",
+            "bg-row-active" => "rgba(40, 30, 20, 0.10)",
+            "fg" => "#1a1410",
+            "fg-dim" => "#6b5e50",
+            "fg-faint" => "#a89880",
+            "border" => "rgba(40, 30, 20, 0.20)",
+            "accent" => "#7a3a1a",
+            "danger" => "#8b1a1a",
+            "badge-snippet" => "#3a4a6a",
+            "badge-quicklink" => "#5a2a6a",
+            "badge-clipboard" => "#7a4a1a",
+            "badge-agent" => "#5a2a6a",
+            "badge-vite" => "#7a6a1a",
+            "badge-docker" => "#1a4a6a",
+            "badge-logs" => "#6b5e50",
+            "shadow" => "0 18px 48px rgba(40, 30, 20, 0.18), 0 4px 12px rgba(40, 30, 20, 0.10)",
+            "font-family" => "\"New York\", \"Times New Roman\", Georgia, serif",
+            "font-family-mono" => "\"Courier New\", Courier, monospace",
+        },
+    }
+}
+
+fn matrix_theme() -> Theme {
+    // Even greener, even darker than Hacker. Pure terminal.
+    Theme {
+        id: "matrix".into(),
+        name: "Matrix".into(),
+        builtin: true,
+        tokens: tokens! {
+            "bg" => "rgba(0, 0, 0, 0.98)",
+            "bg-solid" => "#000000",
+            "bg-row" => "transparent",
+            "bg-row-active" => "rgba(0, 255, 65, 0.16)",
+            "fg" => "#00ff41",
+            "fg-dim" => "#008f17",
+            "fg-faint" => "#005010",
+            "border" => "rgba(0, 255, 65, 0.25)",
+            "accent" => "#a8ff60",
+            "danger" => "#ff4444",
+            "badge-snippet" => "#00ff41",
+            "badge-quicklink" => "#00cc33",
+            "badge-clipboard" => "#aaff60",
+            "badge-agent" => "#00ff88",
+            "badge-vite" => "#aaff44",
+            "badge-docker" => "#00ffaa",
+            "badge-logs" => "#008f17",
+            "shadow" => "0 0 0 1px rgba(0, 255, 65, 0.35), 0 0 80px rgba(0, 255, 65, 0.30)",
+            "font-family" => FONT_TERMINAL,
+            "font-family-mono" => FONT_TERMINAL,
+        },
+    }
+}
+
+fn comic_sans_theme() -> Theme {
+    // The crime against typography. Comic Sans MS ships with macOS.
+    // Bright pastel candy palette to match the energy.
+    Theme {
+        id: "comic-sans".into(),
+        name: "Comic Sans (please don't)".into(),
+        builtin: true,
+        tokens: tokens! {
+            "bg" => "rgba(255, 245, 230, 0.98)",
+            "bg-solid" => "#fff5e6",
+            "bg-row" => "transparent",
+            "bg-row-active" => "rgba(70, 200, 220, 0.18)",
+            "fg" => "#22334d",
+            "fg-dim" => "#6a8aaa",
+            "fg-faint" => "#a8c0d8",
+            "border" => "rgba(70, 200, 220, 0.30)",
+            "accent" => "#22c8a8",
+            "danger" => "#e63946",
+            "badge-snippet" => "#3aa6ff",
+            "badge-quicklink" => "#c63aff",
+            "badge-clipboard" => "#ff9a3a",
+            "badge-agent" => "#ff6abb",
+            "badge-vite" => "#ffd33a",
+            "badge-docker" => "#3ad6c8",
+            "badge-logs" => "#6a8aaa",
+            "shadow" => "0 18px 48px rgba(34, 200, 168, 0.30), 0 4px 12px rgba(34, 200, 168, 0.18)",
+            "font-family" => "\"Comic Sans MS\", \"Chalkboard SE\", cursive",
+            "font-family-mono" => "\"Comic Sans MS\", \"Chalkboard SE\", cursive",
         },
     }
 }

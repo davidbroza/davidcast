@@ -298,6 +298,35 @@ export function Palette({
     };
   }, [kindFilter, onError]);
 
+  // Live theme preview while the picker is open. Snapshot the active
+  // theme on entry, apply each highlighted theme to the document for
+  // preview, and revert on exit unless the user pressed ↵ (which sets
+  // themeCommittedRef inside execute() so the cleanup leaves it alone).
+  const originalThemeRef = useRef<import("../types").Theme | null>(null);
+  const themeCommittedRef = useRef(false);
+  useEffect(() => {
+    if (kindFilter !== "theme") return;
+    themeCommittedRef.current = false;
+    let cancelled = false;
+    api
+      .getActiveTheme()
+      .then((t) => {
+        if (!cancelled) originalThemeRef.current = t;
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+      // Leaving the picker: if the user didn't commit a theme via ↵,
+      // revert the document to the snapshot taken on entry. setActiveTheme
+      // was never called in preview mode, so on-disk state is already
+      // the original — only the live CSS vars need to be reverted.
+      if (!themeCommittedRef.current && originalThemeRef.current) {
+        applyTheme(originalThemeRef.current);
+      }
+      originalThemeRef.current = null;
+    };
+  }, [kindFilter]);
+
   // Skills — scan ~/.claude/skills + plugin caches each time the filter
   // is opened so a freshly-installed skill shows up immediately.
   useEffect(() => {
@@ -740,6 +769,8 @@ export function Palette({
       } else if (isTheme(entry)) {
         const t = await api.setActiveTheme(entry.id);
         applyTheme(t);
+        // Tell the preview-mode cleanup not to revert: the user committed.
+        themeCommittedRef.current = true;
         setToast(`Theme: ${t.name}`);
         window.setTimeout(() => setToast(null), 800);
       } else if (isClipboard(entry)) {
@@ -993,6 +1024,15 @@ export function Palette({
   // Selected entry — used both by execute() and by the side preview pane.
   const selectedEntry = filtered[selected];
   const showSidePreview = screenshotMode || kindFilter === "skill";
+
+  // Apply each highlighted theme live while the picker is open. No
+  // setActiveTheme — that's reserved for ↵ commit. Reverts on exit via
+  // the cleanup effect above.
+  useEffect(() => {
+    if (kindFilter !== "theme") return;
+    if (!selectedEntry || !isTheme(selectedEntry)) return;
+    applyTheme(selectedEntry);
+  }, [kindFilter, selectedEntry]);
 
   // Stable refs / handlers so memo'd Row doesn't re-render unnecessarily.
   // execute() is a closure over half the component's state — capturing it
