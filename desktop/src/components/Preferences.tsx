@@ -1,6 +1,6 @@
 import { disable, enable, isEnabled } from "@tauri-apps/plugin-autostart";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { api, type Settings } from "../api";
 import type { Workspace } from "../types";
 import { relativeTime } from "../utils";
@@ -118,15 +118,27 @@ export function Preferences({ onClose, onError }: Props) {
     }
   }
 
-  function handleKey(e: React.KeyboardEvent) {
-    if (e.key === "Escape") {
-      e.preventDefault();
-      onClose();
-    }
-  }
+  // Window-level Escape so the user doesn't have to click into the panel
+  // first to give it focus. Falls back to onKeyDown on the inner div for
+  // events that originate inside (inputs, selects).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        onClose();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  const rootRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    rootRef.current?.focus();
+  }, []);
 
   return (
-    <div className="palette prefs-inline" onKeyDown={handleKey} tabIndex={-1}>
+    <div className="palette prefs-inline" ref={rootRef} tabIndex={-1}>
       <div className="topbar">
         <div className="prefs-title">Preferences</div>
         <div className="topbar-spacer" />

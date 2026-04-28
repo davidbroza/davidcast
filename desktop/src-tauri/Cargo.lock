@@ -779,7 +779,7 @@ dependencies = [
 
 [[package]]
 name = "desktop"
-version = "0.1.6"
+version = "0.1.8"
 dependencies = [
  "base64 0.22.1",
  "chrono",
@@ -798,6 +798,7 @@ dependencies = [
  "tauri-plugin-global-shortcut",
  "tauri-plugin-opener",
  "tauri-plugin-updater",
+ "tempfile",
  "thiserror 1.0.69",
  "uuid",
 ]

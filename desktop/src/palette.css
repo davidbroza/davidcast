@@ -72,10 +72,18 @@ html, body, #root {
 /* The palette window is transparent; padding around the body gives the
  * CSS shadow room to render outside the rounded surface. The macOS
  * window shadow (`shadow: true` in tauri.conf.json) is rectangular and
- * leaks past the rounded corners — we render our own shadow instead. */
+ * leaks past the rounded corners — we render our own shadow instead.
+ *
+ * The body itself is also rounded + clipped: certain themes use solid
+ * `box-shadow` rings as a frame (Gameboy DMG, Hot Dog Stand, Brutalist),
+ * and WebKit can render those ring corners square when the box's bg is
+ * near-opaque + has a backdrop-filter. The body-level clip masks that
+ * straggler so the corner is always round, regardless of theme. */
 body[data-view="palette"] {
   padding: 18px 22px 26px;
   box-sizing: border-box;
+  border-radius: 24px;
+  overflow: hidden;
 }
 
 .palette {
@@ -137,6 +145,20 @@ body[data-view="palette"] {
 .search {
   padding: 12px 14px 8px;
   border-bottom: 1px solid var(--border);
+}
+
+/* Confetti layer — sits inside body so it's clipped to the rounded
+ * palette mask. Pointer-events:none so it can never intercept clicks. */
+.confetti-layer {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+  z-index: 9999;
+}
+.confetti-piece {
+  position: absolute;
+  will-change: transform, opacity;
 }
 
 .search input {

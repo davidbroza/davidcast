@@ -97,3 +97,119 @@ pub enum StoreError {
     #[error("no data directory")]
     NoDataDir,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::types::{Snippet, Quicklink, OpenIn};
+
+    fn stub_snippet(id: &str) -> Snippet {
+        Snippet {
+            id: id.into(),
+            name: "Test".into(),
+            keyword: None,
+            text: "body".into(),
+            created_at: "2026-01-01T00:00:00Z".into(),
+            updated_at: "2026-01-01T00:00:00Z".into(),
+            deleted: false,
+            rev: 1,
+            sensitive: false,
+        }
+    }
+
+    fn stub_quicklink(id: &str) -> Quicklink {
+        Quicklink {
+            id: id.into(),
+            name: "Link".into(),
+            keyword: None,
+            url: "https://example.com".into(),
+            open_in: OpenIn::DefaultBrowser,
+            created_at: "2026-01-01T00:00:00Z".into(),
+            updated_at: "2026-01-01T00:00:00Z".into(),
+            deleted: false,
+            rev: 1,
+        }
+    }
+
+    // ---------- write_json / read_json_or_default ----------
+
+    #[test]
+    fn write_and_read_json_roundtrip() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("items.json");
+        let items = vec![stub_snippet("a"), stub_snippet("b")];
+        write_json(&path, &items).unwrap();
+        let back: Vec<Snippet> = read_json_or_default(&path).unwrap();
+        assert_eq!(back.len(), 2);
+        assert_eq!(back[0].id, "a");
+        assert_eq!(back[1].id, "b");
+    }
+
+    #[test]
+    fn read_json_or_default_returns_empty_vec_when_absent() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("nonexistent.json");
+        let back: Vec<Snippet> = read_json_or_default(&path).unwrap();
+        assert!(back.is_empty());
+    }
+
+    #[test]
+    fn write_json_is_atomic_temp_then_rename() {
+        // After write_json the .tmp file must not exist alongside the real file.
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("data.json");
+        write_json(&path, &42u32).unwrap();
+        assert!(path.exists());
+        let tmp = path.with_extension("json.tmp");
+        assert!(!tmp.exists(), "tmp file should have been renamed away");
+    }
+
+    // ---------- Store helper paths ----------
+
+    #[test]
+    fn ensure_workspace_dir_creates_directory() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().to_path_buf();
+        Store::ensure_workspace_dir(&root, "myws").unwrap();
+        assert!(root.join("workspaces").join("myws").exists());
+    }
+
+    #[test]
+    fn store_snippets_and_quicklinks_persist_to_disk() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().to_path_buf();
+        // Build a minimal Config pointing at our temp root.
+        let config = crate::types::Config {
+            active_workspace: "ws1".into(),
+            workspaces: vec![crate::types::Workspace {
+                id: "ws1".into(),
+                name: "WS1".into(),
+                color: None,
+            }],
+            show_vite_inline: true,
+            show_docker_inline: true,
+            show_snippets_inline: true,
+            show_quicklinks_inline: true,
+            screenshot_dirs: vec![],
+            theme: "default".into(),
+            check_updates_on_launch: false,
+            backup: crate::types::BackupConfig::default(),
+        };
+        Store::ensure_workspace_dir(&root, "ws1").unwrap();
+        let store = Store { root, config };
+
+        // Snippets
+        let snips = vec![stub_snippet("s1")];
+        store.save_snippets(&snips).unwrap();
+        let loaded = store.load_snippets().unwrap();
+        assert_eq!(loaded.len(), 1);
+        assert_eq!(loaded[0].id, "s1");
+
+        // Quicklinks
+        let qls = vec![stub_quicklink("q1")];
+        store.save_quicklinks(&qls).unwrap();
+        let loaded = store.load_quicklinks().unwrap();
+        assert_eq!(loaded.len(), 1);
+        assert_eq!(loaded[0].id, "q1");
+    }
+}

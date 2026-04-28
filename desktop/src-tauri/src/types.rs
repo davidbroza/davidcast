@@ -193,3 +193,151 @@ pub enum Item {
     Quicklink(Quicklink),
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ---------- OpenIn ----------
+
+    #[test]
+    fn open_in_default_is_default_browser() {
+        let v: OpenIn = Default::default();
+        assert_eq!(v, OpenIn::DefaultBrowser);
+    }
+
+    #[test]
+    fn open_in_serde_roundtrip() {
+        for variant in [OpenIn::DefaultBrowser, OpenIn::Chrome, OpenIn::Safari] {
+            let json = serde_json::to_string(&variant).unwrap();
+            let back: OpenIn = serde_json::from_str(&json).unwrap();
+            assert_eq!(back, variant);
+        }
+    }
+
+    // ---------- Snippet ----------
+
+    fn stub_snippet() -> Snippet {
+        Snippet {
+            id: "s1".into(),
+            name: "My Snippet".into(),
+            keyword: Some("ms".into()),
+            text: "hello world".into(),
+            created_at: "2026-01-01T00:00:00Z".into(),
+            updated_at: "2026-01-01T00:00:00Z".into(),
+            deleted: false,
+            rev: 1,
+            sensitive: false,
+        }
+    }
+
+    #[test]
+    fn snippet_serde_roundtrip() {
+        let s = stub_snippet();
+        let json = serde_json::to_string(&s).unwrap();
+        let back: Snippet = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.id, s.id);
+        assert_eq!(back.name, s.name);
+        assert_eq!(back.keyword, s.keyword);
+        assert_eq!(back.text, s.text);
+        assert_eq!(back.deleted, s.deleted);
+        assert_eq!(back.rev, s.rev);
+        assert_eq!(back.sensitive, s.sensitive);
+    }
+
+    #[test]
+    fn snippet_sensitive_defaults_false_on_deserialize() {
+        // JSON without the `sensitive` field should deserialize with sensitive=false.
+        let json = r#"{"id":"x","name":"n","text":"t","created_at":"","updated_at":"","rev":1,"deleted":false}"#;
+        let s: Snippet = serde_json::from_str(json).unwrap();
+        assert!(!s.sensitive);
+    }
+
+    #[test]
+    fn snippet_keyword_skipped_when_none() {
+        // keyword is None → should not appear in serialized JSON.
+        let mut s = stub_snippet();
+        s.keyword = None;
+        let json = serde_json::to_string(&s).unwrap();
+        assert!(!json.contains("keyword"));
+    }
+
+    // ---------- Quicklink ----------
+
+    fn stub_quicklink() -> Quicklink {
+        Quicklink {
+            id: "q1".into(),
+            name: "GitHub".into(),
+            keyword: Some("gh".into()),
+            url: "https://github.com".into(),
+            open_in: OpenIn::DefaultBrowser,
+            created_at: "2026-01-01T00:00:00Z".into(),
+            updated_at: "2026-01-01T00:00:00Z".into(),
+            deleted: false,
+            rev: 1,
+        }
+    }
+
+    #[test]
+    fn quicklink_serde_roundtrip() {
+        let q = stub_quicklink();
+        let json = serde_json::to_string(&q).unwrap();
+        let back: Quicklink = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.id, q.id);
+        assert_eq!(back.url, q.url);
+        assert_eq!(back.open_in, q.open_in);
+        assert_eq!(back.rev, q.rev);
+    }
+
+    #[test]
+    fn quicklink_open_in_defaults_on_missing_field() {
+        let json = r#"{"id":"x","name":"n","url":"https://example.com","created_at":"","updated_at":"","rev":1,"deleted":false}"#;
+        let q: Quicklink = serde_json::from_str(json).unwrap();
+        assert_eq!(q.open_in, OpenIn::DefaultBrowser);
+    }
+
+    // ---------- Config defaults ----------
+
+    #[test]
+    fn config_default_has_personal_workspace() {
+        let c = Config::default();
+        assert_eq!(c.active_workspace, "personal");
+        assert_eq!(c.workspaces.len(), 1);
+        assert_eq!(c.workspaces[0].id, "personal");
+    }
+
+    #[test]
+    fn config_default_inline_flags_all_true() {
+        let c = Config::default();
+        assert!(c.show_vite_inline);
+        assert!(c.show_docker_inline);
+        assert!(c.show_snippets_inline);
+        assert!(c.show_quicklinks_inline);
+    }
+
+    #[test]
+    fn config_default_theme_is_default() {
+        let c = Config::default();
+        assert_eq!(c.theme, "default");
+    }
+
+    #[test]
+    fn config_default_check_updates_true() {
+        let c = Config::default();
+        assert!(c.check_updates_on_launch);
+    }
+
+    // ---------- BackupConfig defaults ----------
+
+    #[test]
+    fn backup_config_default_disabled() {
+        let b = BackupConfig::default();
+        assert!(!b.enabled);
+        assert_eq!(b.branch, "main");
+        assert_eq!(b.auto_interval_min, 10);
+        assert!(!b.include_analytics);
+        assert!(b.remote.is_empty());
+        assert!(b.last_synced_ms.is_none());
+        assert!(b.last_error.is_none());
+    }
+}
+

@@ -17,7 +17,9 @@
 
 use objc2::rc::Retained;
 use objc2::runtime::{NSObjectProtocol, ProtocolObject};
-use objc2_app_kit::{NSWindow, NSWindowAnimationBehavior};
+use objc2_app_kit::{
+    NSMainMenuWindowLevel, NSWindow, NSWindowAnimationBehavior, NSWindowCollectionBehavior,
+};
 use objc2_foundation::{NSActivityOptions, NSProcessInfo, NSString};
 use std::sync::OnceLock;
 
@@ -33,6 +35,26 @@ pub unsafe fn disable_window_animation(ns_window: *mut std::ffi::c_void) {
     }
     let window: &NSWindow = unsafe { &*(ns_window as *const NSWindow) };
     window.setAnimationBehavior(NSWindowAnimationBehavior::None);
+}
+
+/// Make the palette appear on every Space and float over fullscreen apps.
+/// Without this, ⌥Space does nothing while another app is in macOS
+/// fullscreen — the palette opens on the original Space and the user sees
+/// no UI. With CanJoinAllSpaces + FullScreenAuxiliary + MainMenu level it
+/// appears on top of fullscreen content, like Raycast or Spotlight.
+///
+/// # Safety
+/// Same as `disable_window_animation`.
+pub unsafe fn make_visible_over_fullscreen(ns_window: *mut std::ffi::c_void) {
+    if ns_window.is_null() {
+        return;
+    }
+    let window: &NSWindow = unsafe { &*(ns_window as *const NSWindow) };
+    let behavior = NSWindowCollectionBehavior::CanJoinAllSpaces
+        | NSWindowCollectionBehavior::FullScreenAuxiliary
+        | NSWindowCollectionBehavior::Stationary;
+    window.setCollectionBehavior(behavior);
+    window.setLevel(NSMainMenuWindowLevel as isize);
 }
 
 /// Holds the activity returned by NSProcessInfo so it stays retained for

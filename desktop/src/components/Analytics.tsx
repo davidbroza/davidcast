@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import type { AnalyticsSummary } from "../types";
 import { fmtKind, fmtMs, fmtPct } from "../utils";
@@ -33,12 +33,22 @@ export function Analytics({ onClose, onError }: Props) {
     refresh();
   }, [refresh]);
 
-  function handleKey(e: React.KeyboardEvent) {
-    if (e.key === "Escape") {
-      e.preventDefault();
-      onClose();
-    }
-  }
+  // Window-level Escape — see Preferences.tsx for the rationale.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        onClose();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  const rootRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    rootRef.current?.focus();
+  }, []);
 
   async function clearLog() {
     if (
@@ -62,7 +72,7 @@ export function Analytics({ onClose, onError }: Props) {
   const maxDay = data?.daily_opens.reduce((m, d) => Math.max(m, d.count), 0) ?? 0;
 
   return (
-    <div className="palette analytics-inline" onKeyDown={handleKey} tabIndex={-1}>
+    <div className="palette analytics-inline" ref={rootRef} tabIndex={-1}>
       <div className="topbar">
         <div className="prefs-title">Analytics · davidcast</div>
         <div className="topbar-spacer" />

@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 
 type Props = {
   onClose: () => void;
@@ -232,15 +232,25 @@ const GROUPS: Group[] = [
 ];
 
 export function Help({ onClose }: Props) {
-  function handleKey(e: React.KeyboardEvent) {
-    if (e.key === "Escape") {
-      e.preventDefault();
-      onClose();
-    }
-  }
+  // Window-level Escape — see Preferences.tsx for the rationale.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        onClose();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  const rootRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    rootRef.current?.focus();
+  }, []);
 
   return (
-    <div className="palette help-inline" onKeyDown={handleKey} tabIndex={-1}>
+    <div className="palette help-inline" ref={rootRef} tabIndex={-1}>
       <div className="topbar">
         <div className="prefs-title">Help · davidcast</div>
         <div className="topbar-spacer" />

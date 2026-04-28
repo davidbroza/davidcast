@@ -93,12 +93,22 @@ export function Stats({ onClose, onError }: Props) {
     };
   }, [auto, refresh]);
 
-  function handleKey(e: React.KeyboardEvent) {
-    if (e.key === "Escape") {
-      e.preventDefault();
-      onClose();
-    }
-  }
+  // Window-level Escape — see Preferences.tsx for the rationale.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        onClose();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  const rootRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    rootRef.current?.focus();
+  }, []);
 
   async function copyAsText() {
     if (!data) return;
@@ -148,7 +158,7 @@ export function Stats({ onClose, onError }: Props) {
     : 0;
 
   return (
-    <div className="palette stats-inline" onKeyDown={handleKey} tabIndex={-1}>
+    <div className="palette stats-inline" ref={rootRef} tabIndex={-1}>
       <div className="topbar">
         <div className="prefs-title">System Stats</div>
         <div className="topbar-spacer" />

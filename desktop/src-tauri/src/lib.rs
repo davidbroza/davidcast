@@ -59,6 +59,10 @@ pub fn run() {
                     if let Ok(ns_window) = w.ns_window() {
                         unsafe {
                             macos_perf::disable_window_animation(ns_window);
+                            // Float over fullscreen apps + appear on every
+                            // Space — without this, ⌥Space did nothing
+                            // while another app was fullscreen.
+                            macos_perf::make_visible_over_fullscreen(ns_window);
                         }
                     }
                 }

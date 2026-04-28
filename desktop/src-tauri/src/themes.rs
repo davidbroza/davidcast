@@ -117,6 +117,11 @@ fn builtin() -> Vec<Theme> {
         newsprint_theme(),
         matrix_theme(),
         comic_sans_theme(),
+        // Sci-fi tribute themes.
+        lcars_theme(),
+        star_wars_theme(),
+        stargate_theme(),
+        red_dwarf_theme(),
     ]
 }
 
@@ -820,6 +825,134 @@ fn matrix_theme() -> Theme {
     }
 }
 
+fn lcars_theme() -> Theme {
+    // Star Trek: TNG bridge UI. Black bg, peach/orange/lilac blocks,
+    // condensed Helvetica. Make it so.
+    Theme {
+        id: "lcars".into(),
+        name: "LCARS (Star Trek)".into(),
+        builtin: true,
+        tokens: tokens! {
+            "bg" => "rgba(0, 0, 0, 0.97)",
+            "bg-solid" => "#000000",
+            "bg-row" => "transparent",
+            "bg-row-active" => "rgba(255, 153, 0, 0.22)",
+            "fg" => "#ff9966",
+            "fg-dim" => "#cc99cc",
+            "fg-faint" => "#996699",
+            "border" => "rgba(255, 153, 0, 0.40)",
+            "accent" => "#ff9900",
+            "danger" => "#cc6666",
+            "badge-snippet" => "#99ccff",
+            "badge-quicklink" => "#cc99cc",
+            "badge-clipboard" => "#ffcc99",
+            "badge-agent" => "#cc6699",
+            "badge-vite" => "#ffcc66",
+            "badge-docker" => "#99ccff",
+            "badge-logs" => "#996699",
+            "shadow" => "0 0 0 2px #ff9900, 0 28px 80px rgba(0, 0, 0, 0.7)",
+            "font-family" => "\"Helvetica Neue\", \"Helvetica\", Impact, sans-serif",
+            "font-family-mono" => FONT_MONO,
+        },
+    }
+}
+
+fn star_wars_theme() -> Theme {
+    // Opening crawl: Lucasfilm yellow #FFE81F on the deepest space black.
+    // Lightsaber accents on badges.
+    Theme {
+        id: "star-wars".into(),
+        name: "Star Wars (Crawl)".into(),
+        builtin: true,
+        tokens: tokens! {
+            "bg" => "rgba(0, 0, 8, 0.98)",
+            "bg-solid" => "#000008",
+            "bg-row" => "transparent",
+            "bg-row-active" => "rgba(255, 232, 31, 0.18)",
+            "fg" => "#ffe81f",
+            "fg-dim" => "#b3a316",
+            "fg-faint" => "#5a5208",
+            "border" => "rgba(255, 232, 31, 0.30)",
+            "accent" => "#ffe81f",
+            "danger" => "#ff3030",
+            "badge-snippet" => "#4dd9ff",
+            "badge-quicklink" => "#ff3838",
+            "badge-clipboard" => "#aaff66",
+            "badge-agent" => "#9b59b6",
+            "badge-vite" => "#ffe81f",
+            "badge-docker" => "#4dd9ff",
+            "badge-logs" => "#b3a316",
+            "shadow" => "0 0 0 1px rgba(255, 232, 31, 0.35), 0 28px 100px rgba(255, 232, 31, 0.20)",
+            "font-family" => "\"Trajan Pro\", \"Helvetica Neue\", Helvetica, Impact, sans-serif",
+            "font-family-mono" => FONT_MONO,
+        },
+    }
+}
+
+fn stargate_theme() -> Theme {
+    // Event-horizon blue + Egyptian bronze on deep navy. Chevron seven,
+    // locked.
+    Theme {
+        id: "stargate".into(),
+        name: "Stargate".into(),
+        builtin: true,
+        tokens: tokens! {
+            "bg" => "rgba(10, 18, 32, 0.96)",
+            "bg-solid" => "#0a1220",
+            "bg-row" => "transparent",
+            "bg-row-active" => "rgba(77, 196, 255, 0.16)",
+            "fg" => "#ddb868",
+            "fg-dim" => "#a08850",
+            "fg-faint" => "#5a4a30",
+            "border" => "rgba(221, 184, 104, 0.30)",
+            "accent" => "#4dc4ff",
+            "danger" => "#cc5533",
+            "badge-snippet" => "#4dc4ff",
+            "badge-quicklink" => "#ddb868",
+            "badge-clipboard" => "#c8956d",
+            "badge-agent" => "#88aabb",
+            "badge-vite" => "#ddb868",
+            "badge-docker" => "#4dc4ff",
+            "badge-logs" => "#a08850",
+            "shadow" => "0 0 0 1px rgba(77, 196, 255, 0.40), 0 28px 80px rgba(77, 196, 255, 0.25), 0 0 60px rgba(221, 184, 104, 0.10)",
+            "font-family" => "\"Optima\", \"Trajan Pro\", \"Helvetica Neue\", Helvetica, sans-serif",
+            "font-family-mono" => FONT_MONO,
+        },
+    }
+}
+
+fn red_dwarf_theme() -> Theme {
+    // JMC mining ship hull red, off-white block letters, smegheads
+    // yellow accent and Holly's cyan on badges.
+    Theme {
+        id: "red-dwarf".into(),
+        name: "Red Dwarf".into(),
+        builtin: true,
+        tokens: tokens! {
+            "bg" => "rgba(60, 6, 12, 0.97)",
+            "bg-solid" => "#3c060c",
+            "bg-row" => "transparent",
+            "bg-row-active" => "rgba(255, 220, 70, 0.18)",
+            "fg" => "#f5f0e6",
+            "fg-dim" => "#c4a08a",
+            "fg-faint" => "#7a4040",
+            "border" => "rgba(255, 220, 70, 0.25)",
+            "accent" => "#ffdc46",
+            "danger" => "#ff3030",
+            "badge-snippet" => "#00ddee",
+            "badge-quicklink" => "#ffdc46",
+            "badge-clipboard" => "#cc6666",
+            "badge-agent" => "#00ddee",
+            "badge-vite" => "#ffdc46",
+            "badge-docker" => "#88bbcc",
+            "badge-logs" => "#c4a08a",
+            "shadow" => "0 0 0 2px rgba(255, 220, 70, 0.35), 0 28px 80px rgba(0, 0, 0, 0.7), 0 0 60px rgba(60, 6, 12, 0.5)",
+            "font-family" => "\"Impact\", \"Helvetica Neue\", Helvetica, sans-serif",
+            "font-family-mono" => FONT_MONO,
+        },
+    }
+}
+
 fn comic_sans_theme() -> Theme {
     // The crime against typography. Comic Sans MS ships with macOS.
     // Bright pastel candy palette to match the energy.
@@ -849,5 +982,89 @@ fn comic_sans_theme() -> Theme {
             "font-family" => "\"Comic Sans MS\", \"Chalkboard SE\", cursive",
             "font-family-mono" => "\"Comic Sans MS\", \"Chalkboard SE\", cursive",
         },
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ---------- sanitize_id ----------
+
+    #[test]
+    fn sanitize_id_keeps_alphanumeric_dash_underscore() {
+        assert_eq!(sanitize_id("my-theme_1"), "my-theme_1");
+    }
+
+    #[test]
+    fn sanitize_id_replaces_spaces_and_dots() {
+        assert_eq!(sanitize_id("My Theme.v2"), "My-Theme-v2");
+    }
+
+    #[test]
+    fn sanitize_id_strips_trailing_dashes() {
+        // sanitize_id replaces special chars with '-' but does not strip trailing dashes.
+        assert_eq!(sanitize_id("theme!"), "theme-");
+    }
+
+    #[test]
+    fn sanitize_id_empty_stays_empty() {
+        assert_eq!(sanitize_id(""), "");
+    }
+
+    // ---------- builtin themes ----------
+
+    #[test]
+    fn list_all_includes_expected_builtin_ids() {
+        let themes = list_all();
+        let ids: Vec<&str> = themes.iter().map(|t| t.id.as_str()).collect();
+        for expected in ["default", "light", "high-contrast", "dracula", "nord", "tokyo-night"] {
+            assert!(ids.contains(&expected), "missing builtin theme: {expected}");
+        }
+    }
+
+    #[test]
+    fn all_builtins_have_builtin_flag_set() {
+        // The `builtin` field must be true for every theme returned by the
+        // internal `builtin()` helper (i.e. not loaded from user files).
+        // list_all() prepends builtins; since there are no user themes in test,
+        // every entry in list_all() should be builtin.
+        for t in list_all() {
+            assert!(t.builtin, "expected builtin=true for theme '{}'", t.id);
+        }
+    }
+
+    #[test]
+    fn load_default_returns_some() {
+        let t = load("default");
+        assert!(t.is_some());
+        assert_eq!(t.unwrap().id, "default");
+    }
+
+    #[test]
+    fn load_nonexistent_returns_none() {
+        assert!(load("this-theme-does-not-exist").is_none());
+    }
+
+    #[test]
+    fn builtin_themes_have_nonempty_tokens() {
+        for t in list_all() {
+            assert!(
+                !t.tokens.is_empty(),
+                "theme '{}' has no tokens",
+                t.id
+            );
+        }
+    }
+
+    #[test]
+    fn theme_serde_roundtrip() {
+        let t = load("default").unwrap();
+        let json = serde_json::to_string(&t).unwrap();
+        let back: Theme = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.id, t.id);
+        assert_eq!(back.name, t.name);
+        assert_eq!(back.tokens, t.tokens);
+        assert_eq!(back.builtin, t.builtin);
     }
 }

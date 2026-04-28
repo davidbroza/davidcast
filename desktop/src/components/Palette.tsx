@@ -29,6 +29,7 @@ import {
 } from "../types";
 import type { FileSearchOpts } from "../types";
 import { applyTheme } from "../App";
+import { fireConfetti } from "../confetti";
 import { r2, scheduleIdle } from "../utils";
 
 type KindFilter = PaletteEntry["kind"] | null;
@@ -748,6 +749,7 @@ export function Palette({
       } else if (isSnippet(entry)) {
         await api.executeSnippet(entry.id);
         setToast("Copied to clipboard");
+        fireConfetti({ count: 60 });
         window.setTimeout(() => {
           setToast(null);
           api.hideAndPaste().catch(() => {});
@@ -772,19 +774,30 @@ export function Palette({
         // Tell the preview-mode cleanup not to revert: the user committed.
         themeCommittedRef.current = true;
         setToast(`Theme: ${t.name}`);
+        fireConfetti({ count: 40 });
         window.setTimeout(() => setToast(null), 800);
       } else if (isClipboard(entry)) {
         await api.executeClipboard(entry.id);
         setToast("Pasted from history");
         window.setTimeout(() => setToast(null), 800);
       } else if (isFile(entry)) {
-        // Screenshot mode: default action is to copy the path (ready to
-        // paste into Slack/email/an issue), not the bitmap. The user can
-        // still Cmd+Shift+C to copy the image content if they need it.
+        // Screenshot mode: default action is to copy the BITMAP — the
+        // typical use-case is "paste this screenshot into Slack/email"
+        // and pasting the image is what people expect. ⌘C still copies
+        // the path; ⌘⇧C still copies the bitmap explicitly. Window
+        // stays open so the user can pick another shot.
         if (screenshotMode) {
-          await api.copyFilePath(entry.path);
-          setToast("Path copied");
-          window.setTimeout(() => setToast(null), 700);
+          if (entry.is_image) {
+            await api.copyFileImage(entry.path);
+            setToast("Screenshot copied to clipboard");
+          } else {
+            // .mov / .mp4 (screen recordings) — copy the path; the
+            // clipboard's image flavor doesn't make sense for video.
+            await api.copyFilePath(entry.path);
+            setToast("Path copied");
+          }
+          window.setTimeout(() => setToast(null), 1100);
+          inputRef.current?.focus();
         } else if (entry.is_image) {
           await api.copyFileImage(entry.path);
           setToast("Image copied to clipboard");
