@@ -176,6 +176,16 @@ export const api = {
   wmMaximize: () => invoke<void>("wm_maximize"),
   wmCenter: () => invoke<void>("wm_center"),
 
+  // System quick actions. Destructive ones (empty trash / restart /
+  // shut down / log out) are gated by a confirm dialog in App.tsx —
+  // these wrappers themselves don't prompt.
+  systemLockScreen: () => invoke<void>("system_lock_screen"),
+  systemSleep: () => invoke<void>("system_sleep"),
+  systemEmptyTrash: () => invoke<void>("system_empty_trash"),
+  systemRestart: () => invoke<void>("system_restart"),
+  systemShutDown: () => invoke<void>("system_shut_down"),
+  systemLogOut: () => invoke<void>("system_log_out"),
+
   // Skills
   listSkills: () => invoke<import("./types").SkillEntry[]>("list_skills"),
   readSkill: (path: string) => invoke<string>("read_skill", { path }),

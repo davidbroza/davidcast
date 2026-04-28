@@ -14,6 +14,7 @@ mod icons;
 mod macos_perf;
 mod skills;
 mod store;
+mod system;
 mod themes;
 mod types;
 mod vite_ports;
@@ -249,6 +250,12 @@ pub fn run() {
             commands::wm_bottom_half,
             commands::wm_maximize,
             commands::wm_center,
+            commands::system_lock_screen,
+            commands::system_sleep,
+            commands::system_empty_trash,
+            commands::system_restart,
+            commands::system_shut_down,
+            commands::system_log_out,
             commands::list_themes,
             commands::get_active_theme,
             commands::set_active_theme,

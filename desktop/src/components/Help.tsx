@@ -140,6 +140,42 @@ const GROUPS: Group[] = [
     ],
   },
   {
+    title: "System",
+    blurb: "Raycast-style quick actions. Destructive ones confirm first.",
+    features: [
+      {
+        name: "Lock Screen",
+        command: "system.lock",
+        description: "Sends ⌃⌘Q (the macOS Lock Screen shortcut). Needs Accessibility, same as window management.",
+      },
+      {
+        name: "Sleep",
+        command: "system.sleep",
+        description: "pmset sleepnow — same as the Apple-menu Sleep item.",
+      },
+      {
+        name: "Empty Trash",
+        command: "system.empty_trash",
+        description: "Confirms first, then tells Finder to empty the Trash.",
+      },
+      {
+        name: "Restart",
+        command: "system.restart",
+        description: "Confirms, then asks System Events to restart. macOS still gates with its own dialog.",
+      },
+      {
+        name: "Shut Down",
+        command: "system.shut_down",
+        description: "Confirms, then asks System Events to shut down.",
+      },
+      {
+        name: "Log Out",
+        command: "system.log_out",
+        description: "Confirms, then asks System Events to log out of the current macOS user.",
+      },
+    ],
+  },
+  {
     title: "Workspaces",
     features: [
       {

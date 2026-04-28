@@ -1,4 +1,5 @@
 import { listen } from "@tauri-apps/api/event";
+import { ask } from "@tauri-apps/plugin-dialog";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, type Settings } from "./api";
 import type { Update } from "@tauri-apps/plugin-updater";
@@ -309,8 +310,66 @@ export default function App() {
       case "wm.center":
         api.wmCenter().catch((e) => setError(String(e)));
         break;
+      // System quick actions. Reversible ones (lock, sleep) fire
+      // immediately; destructive ones go through a native confirm so a
+      // stray ↵ on a fuzzy match can't shut the machine down.
+      case "system.lock":
+        api.systemLockScreen().catch((e) => setError(String(e)));
+        break;
+      case "system.sleep":
+        api.systemSleep().catch((e) => setError(String(e)));
+        break;
+      case "system.empty_trash":
+        confirmAndRun(
+          "Empty Trash?",
+          "This permanently deletes everything in your Trash.",
+          api.systemEmptyTrash,
+        );
+        break;
+      case "system.restart":
+        confirmAndRun(
+          "Restart your Mac?",
+          "macOS will close all apps. Unsaved work may be lost.",
+          api.systemRestart,
+        );
+        break;
+      case "system.shut_down":
+        confirmAndRun(
+          "Shut down your Mac?",
+          "macOS will close all apps. Unsaved work may be lost.",
+          api.systemShutDown,
+        );
+        break;
+      case "system.log_out":
+        confirmAndRun(
+          "Log out of your account?",
+          "macOS will close all apps in this session.",
+          api.systemLogOut,
+        );
+        break;
       // "Switch Theme" is handled inline by the Palette via kindFilter.
       // Nothing for App to do here.
+    }
+  }
+
+  // Native confirm dialog. Hides the palette first so the dialog isn't
+  // owned by a window that's about to auto-dismiss on blur.
+  async function confirmAndRun(
+    title: string,
+    message: string,
+    run: () => Promise<void>,
+  ) {
+    try {
+      await api.hidePalette();
+    } catch {
+      /* hide failures shouldn't block the confirm */
+    }
+    try {
+      const ok = await ask(message, { title, kind: "warning" });
+      if (!ok) return;
+      await run();
+    } catch (e) {
+      setError(String(e));
     }
   }
 

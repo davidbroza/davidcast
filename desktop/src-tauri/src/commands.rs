@@ -9,6 +9,7 @@ use crate::files::{self, FileEntry, FileSearchOpts};
 use crate::icons;
 use crate::skills::{self, SkillEntry};
 use crate::store::Store;
+use crate::system;
 use crate::types::*;
 use crate::themes::{self, Theme};
 use crate::vite_ports::{self, VitePortEntry};
@@ -442,6 +443,55 @@ pub fn wm_center(app: AppHandle) -> Result<(), String> {
     run_wm(&app, window_mgmt::center)
 }
 
+// ---------- System quick actions ----------
+//
+// Same hide-then-act pattern as window management: drop the palette so
+// the keystroke / pmset target lands somewhere sensible, then run the
+// shell-out. Destructive actions (restart/shutdown/logout/empty trash)
+// are gated by a frontend confirm step before they get here.
+
+fn run_system<F: FnOnce() -> Result<(), String>>(
+    app: &AppHandle,
+    op: F,
+) -> Result<(), String> {
+    use tauri::Manager;
+    if let Some(w) = app.get_webview_window("main") {
+        let _ = w.hide();
+    }
+    std::thread::sleep(std::time::Duration::from_millis(60));
+    op()
+}
+
+#[tauri::command]
+pub fn system_lock_screen(app: AppHandle) -> Result<(), String> {
+    run_system(&app, system::lock_screen)
+}
+
+#[tauri::command]
+pub fn system_sleep(app: AppHandle) -> Result<(), String> {
+    run_system(&app, system::sleep_now)
+}
+
+#[tauri::command]
+pub fn system_empty_trash(app: AppHandle) -> Result<(), String> {
+    run_system(&app, system::empty_trash)
+}
+
+#[tauri::command]
+pub fn system_restart(app: AppHandle) -> Result<(), String> {
+    run_system(&app, system::restart)
+}
+
+#[tauri::command]
+pub fn system_shut_down(app: AppHandle) -> Result<(), String> {
+    run_system(&app, system::shut_down)
+}
+
+#[tauri::command]
+pub fn system_log_out(app: AppHandle) -> Result<(), String> {
+    run_system(&app, system::log_out)
+}
+
 // ---------- Analytics ----------
 
 #[tauri::command]
@@ -697,6 +747,36 @@ fn builtin_commands() -> Vec<CommandEntry> {
             id: "themes.switch".into(),
             name: "Switch Theme".into(),
             subtitle: "Pick a colour theme — built-in or your own JSON".into(),
+        },
+        CommandEntry {
+            id: "system.lock".into(),
+            name: "Lock Screen".into(),
+            subtitle: "Lock the Mac (⌃⌘Q)".into(),
+        },
+        CommandEntry {
+            id: "system.sleep".into(),
+            name: "Sleep".into(),
+            subtitle: "Put the Mac to sleep".into(),
+        },
+        CommandEntry {
+            id: "system.empty_trash".into(),
+            name: "Empty Trash".into(),
+            subtitle: "Permanently delete everything in Trash".into(),
+        },
+        CommandEntry {
+            id: "system.restart".into(),
+            name: "Restart".into(),
+            subtitle: "Restart the Mac (confirms before)".into(),
+        },
+        CommandEntry {
+            id: "system.shut_down".into(),
+            name: "Shut Down".into(),
+            subtitle: "Shut down the Mac (confirms before)".into(),
+        },
+        CommandEntry {
+            id: "system.log_out".into(),
+            name: "Log Out".into(),
+            subtitle: "Log out of your macOS user (confirms before)".into(),
         },
         CommandEntry {
             id: "open.preferences".into(),
