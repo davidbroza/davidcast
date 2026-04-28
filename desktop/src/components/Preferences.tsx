@@ -16,6 +16,15 @@ export function Preferences({ onClose, onError }: Props) {
   const [autostart, setAutostart] = useState<boolean | null>(null);
   const [settings, setSettings] = useState<Settings | null>(null);
   const [newWsName, setNewWsName] = useState("");
+  // Perf pill is a debug toggle, kept in localStorage rather than the
+  // canonical Config so it stays per-machine.
+  const [perfPillEnabled, setPerfPillEnabled] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem("davidcast.perf_pill") !== "0";
+    } catch {
+      return true;
+    }
+  });
 
   const refresh = useCallback(async () => {
     try {
@@ -228,6 +237,33 @@ export function Preferences({ onClose, onError }: Props) {
                 onClick={() => toggleSetting("show_vite_inline", api.setShowViteInline)}
                 role="switch"
                 aria-checked={!!settings?.show_vite_inline}
+              />
+            </div>
+            <div className="prefs-row">
+              <div className="label">
+                <div className="label-title">Show search performance pill</div>
+                <div className="label-sub">
+                  Tiny <code>in N · list N · count</code> overlay in the
+                  top-right of the palette while typing. Useful for spotting
+                  latency. Stored locally; ignored by sync.
+                </div>
+              </div>
+              <div
+                className={`switch ${perfPillEnabled ? "on" : ""}`}
+                onClick={() => {
+                  const next = !perfPillEnabled;
+                  setPerfPillEnabled(next);
+                  try {
+                    localStorage.setItem(
+                      "davidcast.perf_pill",
+                      next ? "1" : "0"
+                    );
+                  } catch {
+                    /* quota — ignore */
+                  }
+                }}
+                role="switch"
+                aria-checked={perfPillEnabled}
               />
             </div>
             <div className="prefs-row">

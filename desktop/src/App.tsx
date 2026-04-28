@@ -10,7 +10,31 @@ import { Palette } from "./components/Palette";
 import { Preferences } from "./components/Preferences";
 import { UpdateBanner } from "./components/UpdateBanner";
 import { WorkspaceSwitcher } from "./components/WorkspaceSwitcher";
-import type { Item, PaletteEntry, Theme, Workspace } from "./types";
+import { stableEntryKey, type Item, type PaletteEntry, type Theme, type Workspace } from "./types";
+
+const ENTRIES_CACHE_KEY = "davidcast.entries.cache.v1";
+
+/// Identity-only fingerprint of the palette list. Two refreshes returning
+/// the same set of items in the same order produce the same hash even if
+/// volatile fields (agent elapsed, vite last_seen, etc.) differ. Lets us
+/// skip setEntries on routine refreshes — Fuse keeps its index, the row
+/// list keeps its references, no cascading re-render.
+function entriesFingerprint(list: PaletteEntry[]): string {
+  const parts: string[] = [String(list.length)];
+  for (const e of list) parts.push(stableEntryKey(e));
+  return parts.join("|");
+}
+
+function loadCachedEntries(): PaletteEntry[] {
+  try {
+    const v = localStorage.getItem(ENTRIES_CACHE_KEY);
+    if (!v) return [];
+    const parsed = JSON.parse(v);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
 
 /// Set CSS variables on the document root from a theme. Mirrors the
 /// `--<name>` shape used in palette.css; everything kept on the root
@@ -49,7 +73,10 @@ type View =
 type InitialFilter = PaletteEntry["kind"] | null;
 
 export default function App() {
-  const [entries, setEntries] = useState<PaletteEntry[]>([]);
+  // Hydrate entries from the on-disk cache so the palette has data on the
+  // very first ⌃Space after launch — before list_palette has had a chance
+  // to return. The next refresh will replace anything stale.
+  const [entries, setEntries] = useState<PaletteEntry[]>(loadCachedEntries);
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [activeWorkspace, setActiveWorkspace] = useState<string>("");
   const [settings, setSettings] = useState<Settings>({
@@ -66,13 +93,14 @@ export default function App() {
   const [initialFilter, setInitialFilter] = useState<InitialFilter>(null);
   const [session, setSession] = useState<Session>(() => newSession());
 
-  // Cheap content fingerprint of the last `entries` list. We re-fetch on
+  // Identity-only fingerprint of the last `entries` list. We re-fetch on
   // every palette open so dynamic kinds (agents, vite, docker, clipboard)
-  // stay fresh — but if the resulting list is content-equal to what we
-  // already have, we keep the old array reference. That stops the Fuse
-  // index from rebuilding on every back-to-back ⌃Space, which was the
-  // main source of first-keystroke latency.
-  const entriesFingerprintRef = useRef<string>("");
+  // stay fresh — but if the resulting set of items is unchanged, we keep
+  // the old array reference. That stops the Fuse index from rebuilding on
+  // every back-to-back ⌃Space, which was a major source of typing latency.
+  // Initialized from the hydrated cache so an unchanged refresh after
+  // launch is also a no-op.
+  const entriesFingerprintRef = useRef<string>(entriesFingerprint(loadCachedEntries()));
 
   // Tracks the most recent refresh outcome so the open-perf event can
   // include whether refresh changed anything (cache hit vs miss).
@@ -88,11 +116,19 @@ export default function App() {
     ]);
     setWorkspaces(ws.workspaces);
     setActiveWorkspace(ws.active);
-    const fp = JSON.stringify(list);
+    const fp = entriesFingerprint(list);
     const changed = fp !== entriesFingerprintRef.current;
     if (changed) {
       entriesFingerprintRef.current = fp;
       setEntries(list);
+      // Persist so next launch hydrates with the same data and the very
+      // first open feels instant. Stringify is bounded (a few hundred KB
+      // for ~300 entries) and runs off the keystroke critical path.
+      try {
+        localStorage.setItem(ENTRIES_CACHE_KEY, JSON.stringify(list));
+      } catch {
+        /* quota — ignore */
+      }
     }
     setSettings(s);
     lastRefreshChangedRef.current = changed;

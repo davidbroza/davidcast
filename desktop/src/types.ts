@@ -198,6 +198,39 @@ export function asItem(e: PaletteEntry): Item | null {
   return null;
 }
 
+/// Stable identity key for a palette entry. Includes the user-visible
+/// name where applicable, but excludes volatile fields (elapsed times,
+/// last_seen, mtimes, status strings) so two refreshes of the same set
+/// hash identically. Used both as a React key and for change detection
+/// across refreshes — if every entry's stableEntryKey is unchanged, no
+/// row content the user sees has changed and we can skip re-rendering.
+export function stableEntryKey(e: PaletteEntry): string {
+  switch (e.kind) {
+    case "command":
+      return `c:${e.id}`;
+    case "snippet":
+      return `s:${e.id}:${e.name}:${e.keyword ?? ""}:${e.sensitive ? 1 : 0}`;
+    case "quicklink":
+      return `q:${e.id}:${e.name}:${e.keyword ?? ""}:${e.url}`;
+    case "app":
+      return `a:${e.path}:${e.name}`;
+    case "agent":
+      return `g:${e.pid}:${e.project}:${e.cwd}`;
+    case "vite":
+      return `v:${e.pid}:${e.port}`;
+    case "docker":
+      return `d:${e.id}:${e.mode}`;
+    case "clipboard":
+      return `cp:${e.id}`;
+    case "file":
+      return `f:${e.path}`;
+    case "theme":
+      return `t:${e.id}`;
+    case "skill":
+      return `sk:${e.path}`;
+  }
+}
+
 export type BackupSettings = {
   enabled: boolean;
   remote: string;

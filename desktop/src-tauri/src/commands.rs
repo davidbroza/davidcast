@@ -728,14 +728,48 @@ fn builtin_commands() -> Vec<CommandEntry> {
 
 #[tauri::command]
 pub fn list_palette(store: StoreState<'_>) -> Result<Vec<PaletteEntry>, String> {
+    let total_t0 = std::time::Instant::now();
     let s = store.read();
+    let store_t0 = std::time::Instant::now();
     let snippets = s.load_snippets().map_err(|e| e.to_string())?;
     let quicklinks = s.load_quicklinks().map_err(|e| e.to_string())?;
+    let store_ms = store_t0.elapsed().as_millis();
     drop(s);
-    let apps_list = apps::list_apps();
-    let agent_list = agents::list_agents();
-    let vite_list = vite_ports::list_vite_ports();
-    let docker_list = docker_ps::list_docker_containers();
+
+    // Run the four shell-out-heavy subsystems in parallel. Each one is
+    // independent — apps scans the filesystem, agents/vite/docker each
+    // shell out to ps / lsof / docker. Sequential they were ~1s; in
+    // parallel the total is bounded by the slowest single one.
+    let (apps_list, agent_list, vite_list, docker_list, breakdown) =
+        std::thread::scope(|scope| {
+            let apps_h = scope.spawn(|| {
+                let t = std::time::Instant::now();
+                let r = apps::list_apps();
+                (r, t.elapsed().as_millis())
+            });
+            let agents_h = scope.spawn(|| {
+                let t = std::time::Instant::now();
+                let r = agents::list_agents();
+                (r, t.elapsed().as_millis())
+            });
+            let vite_h = scope.spawn(|| {
+                let t = std::time::Instant::now();
+                let r = vite_ports::list_vite_ports();
+                (r, t.elapsed().as_millis())
+            });
+            let docker_h = scope.spawn(|| {
+                let t = std::time::Instant::now();
+                let r = docker_ps::list_docker_containers();
+                (r, t.elapsed().as_millis())
+            });
+            let (apps_r, apps_ms) = apps_h.join().unwrap();
+            let (agents_r, agents_ms) = agents_h.join().unwrap();
+            let (vite_r, vite_ms) = vite_h.join().unwrap();
+            let (docker_r, docker_ms) = docker_h.join().unwrap();
+            let breakdown =
+                format!("apps={apps_ms} agents={agents_ms} vite={vite_ms} docker={docker_ms}");
+            (apps_r, agents_r, vite_r, docker_r, breakdown)
+        });
 
     let mut out = Vec::with_capacity(
         builtin_commands().len()
@@ -774,6 +808,13 @@ pub fn list_palette(store: StoreState<'_>) -> Result<Vec<PaletteEntry>, String> 
     for a in apps_list {
         out.push(PaletteEntry::App(a));
     }
+    eprintln!(
+        "[davidcast] list_palette {}ms (store={}ms {}; total_entries={})",
+        total_t0.elapsed().as_millis(),
+        store_ms,
+        breakdown,
+        out.len()
+    );
     Ok(out)
 }
 

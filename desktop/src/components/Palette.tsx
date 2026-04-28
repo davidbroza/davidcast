@@ -125,6 +125,17 @@ function parseFileQuery(input: string): FileSearchOpts {
   return opts;
 }
 
+// Read the perf-pill toggle from localStorage. Default on so first-time
+// users see the latency overlay and know it exists. Per-machine (kept
+// out of the canonical Config so it doesn't sync via backup).
+function isPerfPillEnabled(): boolean {
+  try {
+    return localStorage.getItem("davidcast.perf_pill") !== "0";
+  } catch {
+    return true;
+  }
+}
+
 function touchRecent(key: string) {
   const map = { ...loadRecents() };
   map[key] = Date.now();
@@ -202,11 +213,17 @@ export function Palette({
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const deleteTimer = useRef<number | null>(null);
-  // Tracks whether the most recent input was the mouse. Keyboard nav flips
-  // this to false; the next real mousemove flips it back to true. Without
-  // this, scrolling the list under a stationary cursor fires onMouseEnter
-  // on whatever row landed under the pointer and yanks the selection back.
-  const mouseActiveRef = useRef(true);
+  // Hover-select gate. Stores the timestamp of the last *real* mousemove
+  // (not a synthetic mouseenter from rows shifting under a stationary
+  // cursor). Hover only counts if a real move happened recently. This
+  // covers three cases at once:
+  //   - palette appears under a stationary cursor on open → no select
+  //   - list reflows during typing → no select
+  //   - keyboard nav scrolls the list under cursor → no select
+  // The user must move the mouse to "activate" hover; once they do,
+  // hover-select feels normal until the list shifts again.
+  const HOVER_WINDOW_MS = 120;
+  const lastMoveAtRef = useRef(0);
 
   const active = workspaces.find((w) => w.id === activeWorkspaceId);
 
@@ -508,7 +525,7 @@ export function Palette({
   // "list scrolled under a stationary cursor and accidentally re-hovered".
   useEffect(() => {
     const onMove = () => {
-      mouseActiveRef.current = true;
+      lastMoveAtRef.current = performance.now();
     };
     document.addEventListener("mousemove", onMove);
     return () => document.removeEventListener("mousemove", onMove);
@@ -547,6 +564,9 @@ export function Palette({
       setSelected(0);
       setKindFilter(null);
       firstKeystrokeRef.current = true;
+      // Reset hover gate so a stale mousemove from before the open
+      // doesn't auto-select on the next show.
+      lastMoveAtRef.current = 0;
     };
     window.addEventListener("blur", onBlur);
     return () => window.removeEventListener("blur", onBlur);
@@ -793,7 +813,7 @@ export function Palette({
       (ctrlOnly && (e.key === "n" || e.key === "j"))
     ) {
       e.preventDefault();
-      mouseActiveRef.current = false;
+      lastMoveAtRef.current = 0;
       arrowStampRef.current = performance.now();
       arrowDirRef.current = "down";
       setSelected((s) => Math.min(filtered.length - 1, s + 1));
@@ -801,7 +821,7 @@ export function Palette({
     }
     if (e.key === "ArrowUp" || (ctrlOnly && (e.key === "p" || e.key === "k"))) {
       e.preventDefault();
-      mouseActiveRef.current = false;
+      lastMoveAtRef.current = 0;
       arrowStampRef.current = performance.now();
       arrowDirRef.current = "up";
       setSelected((s) => Math.max(0, s - 1));
@@ -982,7 +1002,9 @@ export function Palette({
   const executeRef = useRef(execute);
   executeRef.current = execute;
   const handleHover = useCallback((i: number) => {
-    if (mouseActiveRef.current) setSelected(i);
+    if (performance.now() - lastMoveAtRef.current < HOVER_WINDOW_MS) {
+      setSelected(i);
+    }
   }, []);
   const handleClick = useCallback((i: number) => {
     const entry = filteredRef.current[i];
@@ -1101,7 +1123,7 @@ export function Palette({
         />
       )}
 
-      {perfText && (
+      {perfText && isPerfPillEnabled() && (
         <div
           style={{
             position: "absolute",
