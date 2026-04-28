@@ -18,7 +18,7 @@
 use objc2::rc::Retained;
 use objc2::runtime::{NSObjectProtocol, ProtocolObject};
 use objc2_app_kit::{
-    NSPopUpMenuWindowLevel, NSWindow, NSWindowAnimationBehavior, NSWindowCollectionBehavior,
+    NSScreenSaverWindowLevel, NSWindow, NSWindowAnimationBehavior, NSWindowCollectionBehavior,
 };
 use objc2_foundation::{NSActivityOptions, NSProcessInfo, NSString};
 use std::sync::OnceLock;
@@ -58,9 +58,18 @@ pub unsafe fn make_visible_over_fullscreen(ns_window: *mut std::ffi::c_void) {
     let window: &NSWindow = unsafe { &*(ns_window as *const NSWindow) };
     let behavior = NSWindowCollectionBehavior::CanJoinAllSpaces
         | NSWindowCollectionBehavior::FullScreenAuxiliary
-        | NSWindowCollectionBehavior::Stationary;
+        | NSWindowCollectionBehavior::Stationary
+        | NSWindowCollectionBehavior::IgnoresCycle;
     window.setCollectionBehavior(behavior);
-    window.setLevel(NSPopUpMenuWindowLevel as isize);
+    // Top-of-the-stack window level. ScreenSaver (1000) is what
+    // Spotlight uses; PopUpMenu (101) and MainMenu (24) both lost
+    // the race against Tauri's `alwaysOnTop: true` re-application,
+    // which now lives off in tauri.conf.json. Belt + suspenders.
+    window.setLevel(NSScreenSaverWindowLevel as isize);
+    // Don't auto-hide when the app deactivates — the palette is the
+    // only window the user interacts with, and "deactivate" fires
+    // every time their focus moves to the underlying app.
+    window.setHidesOnDeactivate(false);
 }
 
 /// Holds the activity returned by NSProcessInfo so it stays retained for
