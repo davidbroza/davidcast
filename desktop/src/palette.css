@@ -1,5 +1,31 @@
+/* Bundled fonts — themes can opt into these via the `font-family` token.
+ * Files live in src/assets/fonts/ and Vite fingerprints + bundles them
+ * into dist/ at build time, so the .app ships everything. */
+@font-face {
+  font-family: "Press Start 2P";
+  src: url("./assets/fonts/press-start-2p.woff2") format("woff2");
+  font-display: swap;
+  font-weight: normal;
+  font-style: normal;
+}
+@font-face {
+  font-family: "VT323";
+  src: url("./assets/fonts/vt323.woff2") format("woff2");
+  font-display: swap;
+  font-weight: normal;
+  font-style: normal;
+}
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("./assets/fonts/jetbrains-mono.woff2") format("woff2");
+  font-display: swap;
+  font-weight: normal;
+  font-style: normal;
+}
+
 :root {
   --bg: rgba(24, 24, 28, 0.92);
+  --bg-solid: #18181c;
   --bg-row: transparent;
   --bg-row-active: rgba(255, 255, 255, 0.08);
   --fg: #e8e8ea;
@@ -16,6 +42,8 @@
   --badge-vite: #f5e961;
   --badge-docker: #5ab8e0;
   --badge-logs: #8aa2b8;
+  --font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+  --font-family-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
 * {
@@ -28,7 +56,7 @@ html, body, #root {
   padding: 0;
   background: transparent;
   color: var(--fg);
-  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+  font-family: var(--font-family);
   font-size: 14px;
   overflow: hidden;
   user-select: none;
@@ -324,7 +352,7 @@ body[data-view="palette"] {
   margin: 0;
   white-space: pre-wrap;
   word-wrap: break-word;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--font-family-mono);
   font-size: 11.5px;
   line-height: 1.5;
   color: var(--fg);
@@ -410,12 +438,17 @@ body[data-view="palette"] {
   bottom: 42px;
   left: 10px;
   right: 10px;
-  background: linear-gradient(
-    180deg,
-    rgba(239, 106, 106, 0.22),
-    rgba(239, 106, 106, 0.14)
-  );
-  border: 1px solid rgba(239, 106, 106, 0.5);
+  /* Layer the theme's solid bg under a red tint so the rows underneath
+   * don't bleed through. Two stacked backgrounds — top one alpha-tinted,
+   * bottom one solid — beats a single rgba() gradient. */
+  background:
+    linear-gradient(
+      180deg,
+      rgba(239, 106, 106, 0.28),
+      rgba(239, 106, 106, 0.18)
+    ),
+    var(--bg-solid);
+  border: 1px solid rgba(239, 106, 106, 0.55);
   color: #ffdede;
   padding: 10px 14px;
   border-radius: 8px;
@@ -479,7 +512,7 @@ body[data-view="palette"] {
   background: rgba(255, 255, 255, 0.06);
   padding: 1px 6px;
   border-radius: 4px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--font-family-mono);
   font-size: 11px;
 }
 
@@ -583,7 +616,7 @@ body[data-view="palette"] {
 .form-field textarea {
   min-height: 120px;
   resize: vertical;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--font-family-mono);
 }
 
 .form-error {
@@ -697,7 +730,7 @@ body[data-view="palette"] {
   border: 1px solid var(--border);
   border-radius: 12px;
   box-shadow: 0 14px 40px rgba(0, 0, 0, 0.45);
-  font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+  font-family: var(--font-family);
   font-size: 13px;
   color: var(--fg);
   z-index: 100;
