@@ -2,6 +2,7 @@ import { listen } from "@tauri-apps/api/event";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, type Settings } from "./api";
 import type { Update } from "@tauri-apps/plugin-updater";
+import { r2, scheduleIdle } from "./utils";
 import { Analytics } from "./components/Analytics";
 import { Help } from "./components/Help";
 import { ItemForm } from "./components/ItemForm";
@@ -73,7 +74,13 @@ export default function App() {
   // main source of first-keystroke latency.
   const entriesFingerprintRef = useRef<string>("");
 
+  // Tracks the most recent refresh outcome so the open-perf event can
+  // include whether refresh changed anything (cache hit vs miss).
+  const lastRefreshChangedRef = useRef<boolean>(false);
+  const lastRefreshMsRef = useRef<number>(0);
+
   const refresh = useCallback(async () => {
+    const t0 = performance.now();
     const [ws, list, s] = await Promise.all([
       api.listWorkspaces(),
       api.listPalette(),
@@ -82,11 +89,14 @@ export default function App() {
     setWorkspaces(ws.workspaces);
     setActiveWorkspace(ws.active);
     const fp = JSON.stringify(list);
-    if (fp !== entriesFingerprintRef.current) {
+    const changed = fp !== entriesFingerprintRef.current;
+    if (changed) {
       entriesFingerprintRef.current = fp;
       setEntries(list);
     }
     setSettings(s);
+    lastRefreshChangedRef.current = changed;
+    lastRefreshMsRef.current = performance.now() - t0;
   }, []);
 
   useEffect(() => {
@@ -130,6 +140,38 @@ export default function App() {
     }
   }, []);
 
+  // Stamped when the palette is dismissed (blur). Used to compute
+  // idle_ms_since_last_use on the next open — that's the signal we
+  // need to spot macOS App Nap waking the process up.
+  const lastDismissAtRef = useRef<number | null>(null);
+
+  const measureOpen = useCallback(
+    (sessionId: string, via: string) => {
+      const showStartedAt = performance.now();
+      const idleMs =
+        lastDismissAtRef.current != null
+          ? showStartedAt - lastDismissAtRef.current
+          : null;
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          const paintMs = performance.now() - showStartedAt;
+          scheduleIdle(() => {
+            api
+              .analyticsRecord(sessionId, "perf_open", {
+                via,
+                paint_ms: r2(paintMs),
+                idle_ms_since_last_use: idleMs == null ? null : r2(idleMs),
+                refresh_changed: lastRefreshChangedRef.current,
+                refresh_ms: r2(lastRefreshMsRef.current),
+              })
+              .catch(() => {});
+          });
+        });
+      });
+    },
+    []
+  );
+
   useEffect(() => {
     const offShow = listen("palette:show", () => {
       setView({ kind: "palette" });
@@ -138,6 +180,7 @@ export default function App() {
       const s = newSession();
       setSession(s);
       api.analyticsRecord(s.id, "open", { via: "hotkey" }).catch(() => {});
+      measureOpen(s.id, "hotkey");
       refresh().catch((e) => setError(String(e)));
     });
     const offClipboard = listen("clipboard:show", () => {
@@ -149,6 +192,7 @@ export default function App() {
       api
         .analyticsRecord(s.id, "open", { via: "clipboard_hotkey" })
         .catch(() => {});
+      measureOpen(s.id, "clipboard_hotkey");
       refresh().catch((e) => setError(String(e)));
     });
     // The tray menu's "Preferences…" item routes through the backend so
@@ -160,12 +204,19 @@ export default function App() {
       setInitialFilter(null);
       refresh().catch((e) => setError(String(e)));
     });
+    // Stamp the moment the window loses focus so the *next* open can
+    // report idle_ms_since_last_use. Cheap; just a timestamp.
+    const onBlurStamp = () => {
+      lastDismissAtRef.current = performance.now();
+    };
+    window.addEventListener("blur", onBlurStamp);
     return () => {
       offShow.then((fn) => fn());
       offClipboard.then((fn) => fn());
       offPrefs.then((fn) => fn());
+      window.removeEventListener("blur", onBlurStamp);
     };
-  }, [refresh]);
+  }, [refresh, measureOpen]);
 
   // Auto-dismiss errors so a stale message doesn't sit forever.
   useEffect(() => {

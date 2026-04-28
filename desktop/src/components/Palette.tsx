@@ -29,6 +29,7 @@ import {
 } from "../types";
 import type { FileSearchOpts } from "../types";
 import { applyTheme } from "../App";
+import { r2, scheduleIdle } from "../utils";
 
 type KindFilter = PaletteEntry["kind"] | null;
 
@@ -73,16 +74,6 @@ const FUSE_OPTIONS: import("fuse.js").IFuseOptions<PaletteEntry> = {
 // "update both sides whenever we write."
 let recentsCache: Record<string, number> | null = null;
 
-// Run a side-effect during idle time. Used for analytics dispatches that
-// shouldn't compete with paint or input handling — even invoke()'s
-// synchronous serialize step is enough to nudge a frame budget.
-function scheduleIdle(fn: () => void) {
-  type RIC = (cb: () => void, opts?: { timeout: number }) => number;
-  const ric = (window as unknown as { requestIdleCallback?: RIC })
-    .requestIdleCallback;
-  if (ric) ric(fn, { timeout: 2000 });
-  else window.setTimeout(fn, 0);
-}
 
 function loadRecents(): Record<string, number> {
   if (recentsCache) return recentsCache;
@@ -197,6 +188,16 @@ export function Palette({
   // session — that's the one the user feels as "open + type". Subsequent
   // keystrokes are warm-path. Logged distinctly in analytics.
   const firstKeystrokeRef = useRef(true);
+  // Stamps for measuring user-perceived latencies of operations other
+  // than typing. Each is set by the trigger and read by the consumer.
+  const dismissStampRef = useRef<number | null>(null);
+  const dismissTriggerRef = useRef<string | null>(null);
+  const arrowStampRef = useRef<number | null>(null);
+  const arrowDirRef = useRef<"up" | "down" | null>(null);
+  // Mirror session into a ref so the blur handler (whose effect runs once)
+  // always reads the current session id when logging.
+  const sessionRef = useRef(session);
+  sessionRef.current = session;
   const [perfText, setPerfText] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
@@ -469,8 +470,8 @@ export function Palette({
         scheduleIdle(() => {
           api
             .analyticsRecord(sessionId, "perf_keystroke", {
-              input_ms: Number(inputMs.toFixed(2)),
-              list_ms: Number(listMs.toFixed(2)),
+              input_ms: r2(inputMs),
+              list_ms: r2(listMs),
               result_count: resultCount,
               q_len: qLen,
               first_in_session: wasFirst,
@@ -524,6 +525,24 @@ export function Palette({
   // items vanish until you hit Escape.
   useEffect(() => {
     const onBlur = () => {
+      // If the user pressed Escape (or otherwise triggered an explicit
+      // dismiss), report the time from the trigger to actual blur — that's
+      // the macOS window-hide latency they're feeling.
+      if (dismissStampRef.current != null) {
+        const ms = performance.now() - dismissStampRef.current;
+        const trigger = dismissTriggerRef.current ?? "unknown";
+        const sid = sessionRef.current.id;
+        dismissStampRef.current = null;
+        dismissTriggerRef.current = null;
+        scheduleIdle(() => {
+          api
+            .analyticsRecord(sid, "perf_dismiss", {
+              ms: r2(ms),
+              via: trigger,
+            })
+            .catch(() => {});
+        });
+      }
       setQuery("");
       setSelected(0);
       setKindFilter(null);
@@ -562,6 +581,32 @@ export function Palette({
     const el = listRef.current.querySelector<HTMLDivElement>(".row.active");
     el?.scrollIntoView({ block: "nearest" });
   }, [selected]);
+
+  // Measure arrow-nav latency: keydown stamp → row repaint with new
+  // .active class. With memo'd Row only two rows re-render, so this
+  // should be tiny — but worth confirming over time.
+  useLayoutEffect(() => {
+    if (arrowStampRef.current == null) return;
+    const start = arrowStampRef.current;
+    const dir = arrowDirRef.current ?? "down";
+    arrowStampRef.current = null;
+    arrowDirRef.current = null;
+    const sid = session.id;
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        const ms = performance.now() - start;
+        scheduleIdle(() => {
+          api
+            .analyticsRecord(sid, "perf_arrow", {
+              ms: r2(ms),
+              dir,
+              result_count: filtered.length,
+            })
+            .catch(() => {});
+        });
+      });
+    });
+  }, [selected, filtered.length, session.id]);
 
   async function execute(entry: PaletteEntry) {
     const startedAt = Date.now();
@@ -749,12 +794,16 @@ export function Palette({
     ) {
       e.preventDefault();
       mouseActiveRef.current = false;
+      arrowStampRef.current = performance.now();
+      arrowDirRef.current = "down";
       setSelected((s) => Math.min(filtered.length - 1, s + 1));
       return;
     }
     if (e.key === "ArrowUp" || (ctrlOnly && (e.key === "p" || e.key === "k"))) {
       e.preventDefault();
       mouseActiveRef.current = false;
+      arrowStampRef.current = performance.now();
+      arrowDirRef.current = "up";
       setSelected((s) => Math.max(0, s - 1));
       return;
     }
@@ -834,6 +883,11 @@ export function Palette({
         setKindFilter(null);
         return;
       }
+      // Stamp now; the blur handler will log the delta when the window
+      // actually transitions out of focus. That delta IS what the user
+      // feels as the dismiss latency.
+      dismissStampRef.current = performance.now();
+      dismissTriggerRef.current = "escape";
       api.hidePalette();
       return;
     }

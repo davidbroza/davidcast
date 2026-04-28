@@ -44,3 +44,21 @@ export function fmtSize(bytes: number): string {
     return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
   return `${(bytes / 1024 / 1024 / 1024).toFixed(2)} GB`;
 }
+
+/// Run a side-effect on idle. Used for analytics dispatches that must not
+/// compete with paint/input — even invoke()'s synchronous serialize step is
+/// enough to nudge a frame budget. Falls back to setTimeout(0) on browsers
+/// without requestIdleCallback.
+export function scheduleIdle(fn: () => void) {
+  type RIC = (cb: () => void, opts?: { timeout: number }) => number;
+  const ric = (window as unknown as { requestIdleCallback?: RIC })
+    .requestIdleCallback;
+  if (ric) ric(fn, { timeout: 2000 });
+  else window.setTimeout(fn, 0);
+}
+
+/// Round to 2 decimal places. Used for analytics payloads to keep the
+/// JSONL readable without sacrificing useful precision.
+export function r2(n: number): number {
+  return Number(n.toFixed(2));
+}
