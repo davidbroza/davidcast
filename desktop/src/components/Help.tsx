@@ -210,6 +210,11 @@ const GROUPS: Group[] = [
         description: "Top queries, top items, success rate, daily activity. Reads the local JSONL — never leaves the box.",
       },
       {
+        name: "Show System Stats",
+        command: "show.stats",
+        description: "CPU load, memory pressure, disk usage, battery, thermal status. Pure shell-outs (sysctl / vm_stat / df / pmset). Auto-refreshes every 2s while open.",
+      },
+      {
         name: "Check for Updates",
         command: "app.check_updates",
         description: "Pings the GitHub Releases endpoint and downloads + installs a newer signed bundle. Auto-runs on launch unless disabled in Preferences.",

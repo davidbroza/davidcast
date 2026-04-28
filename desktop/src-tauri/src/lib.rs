@@ -13,6 +13,7 @@ mod icons;
 #[cfg(target_os = "macos")]
 mod macos_perf;
 mod skills;
+mod stats;
 mod store;
 mod system;
 mod themes;
@@ -250,6 +251,7 @@ pub fn run() {
             commands::wm_bottom_half,
             commands::wm_maximize,
             commands::wm_center,
+            commands::system_stats,
             commands::system_lock_screen,
             commands::system_sleep,
             commands::system_empty_trash,

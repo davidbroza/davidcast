@@ -460,3 +460,123 @@
   margin: 0;
   padding-top: 4px;
 }
+
+/* ---- System stats ---- */
+
+.palette.stats-inline {
+  /* Same scrolling layout as the prefs/help/analytics views. */
+  background: var(--bg);
+}
+.stats {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 8px 4px 24px;
+}
+.stats-empty {
+  text-align: center;
+  color: var(--fg-dim);
+  margin: 24px 0;
+}
+.stats-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.stats-section h2 {
+  font-size: 12px;
+  font-weight: 500;
+  margin: 0 0 4px;
+  color: var(--fg-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.stats-section-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+.stats-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.stats-actions button {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--border);
+  color: var(--fg);
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 11.5px;
+  cursor: pointer;
+  font-family: var(--font-family);
+}
+.stats-actions button:hover {
+  background: rgba(255, 255, 255, 0.10);
+}
+.stats-auto {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--fg-dim);
+}
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px 24px;
+}
+.stats-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.stats-label {
+  color: var(--fg-faint);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.stats-value {
+  color: var(--fg);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+.stats-sub {
+  color: var(--fg-dim);
+  font-size: 11px;
+}
+.stats-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-size: 12.5px;
+  color: var(--fg);
+}
+.stats-row b {
+  font-weight: 500;
+}
+.stats-bar {
+  height: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.stats-bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.4s ease, background 0.2s linear;
+}
+.stats-ok {
+  color: var(--accent);
+}
+.stats-warn {
+  color: var(--badge-clipboard);
+}
+.stats-foot {
+  text-align: center;
+  color: var(--fg-faint);
+  font-size: 10.5px;
+  margin: 8px 0 0;
+}

@@ -176,6 +176,10 @@ export const api = {
   wmMaximize: () => invoke<void>("wm_maximize"),
   wmCenter: () => invoke<void>("wm_center"),
 
+  // System stats — one snapshot per call (no live sampler in the
+  // backend). The Stats view re-invokes on its refresh button.
+  systemStats: () => invoke<import("./types").SystemStats>("system_stats"),
+
   // System quick actions. Destructive ones (empty trash / restart /
   // shut down / log out) are gated by a confirm dialog in App.tsx —
   // these wrappers themselves don't prompt.

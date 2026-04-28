@@ -250,6 +250,28 @@ export type BackupStatus = {
   last_error: string | null;
 };
 
+export type SystemStats = {
+  load_1m: number;
+  load_5m: number;
+  load_15m: number;
+  cpu_count: number;
+  cpu_brand: string;
+  mem_total: number;
+  mem_used: number;
+  mem_pressure: string | null;
+  disk_total: number;
+  disk_used: number;
+  disk_path: string;
+  battery_percent: number | null;
+  battery_state: string | null;
+  battery_time_remaining: string | null;
+  thermal_pressure: string | null;
+  uptime_secs: number;
+  host_name: string;
+  os_version: string;
+  model: string;
+};
+
 export type AnalyticsSummary = {
   log_path: string | null;
   total_events: number;

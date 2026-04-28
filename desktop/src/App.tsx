@@ -9,6 +9,7 @@ import { Help } from "./components/Help";
 import { ItemForm } from "./components/ItemForm";
 import { Palette } from "./components/Palette";
 import { Preferences } from "./components/Preferences";
+import { Stats } from "./components/Stats";
 import { UpdateBanner } from "./components/UpdateBanner";
 import { WorkspaceSwitcher } from "./components/WorkspaceSwitcher";
 import { stableEntryKey, type Item, type PaletteEntry, type Theme, type Workspace } from "./types";
@@ -69,7 +70,8 @@ type View =
   | { kind: "workspace-switcher" }
   | { kind: "preferences" }
   | { kind: "help" }
-  | { kind: "analytics" };
+  | { kind: "analytics" }
+  | { kind: "stats" };
 
 type InitialFilter = PaletteEntry["kind"] | null;
 
@@ -284,6 +286,9 @@ export default function App() {
       case "show.analytics":
         setView({ kind: "analytics" });
         break;
+      case "show.stats":
+        setView({ kind: "stats" });
+        break;
       case "app.check_updates":
         checkForUpdateNow();
         break;
@@ -440,6 +445,9 @@ export default function App() {
       {view.kind === "help" && <Help onClose={backToPalette} />}
       {view.kind === "analytics" && (
         <Analytics onClose={backToPalette} onError={setError} />
+      )}
+      {view.kind === "stats" && (
+        <Stats onClose={backToPalette} onError={setError} />
       )}
       {error && (
         <div className="error-banner" role="alert">

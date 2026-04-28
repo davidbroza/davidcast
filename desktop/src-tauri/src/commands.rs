@@ -8,6 +8,7 @@ use crate::docker_ps::{self, DockerEntry};
 use crate::files::{self, FileEntry, FileSearchOpts};
 use crate::icons;
 use crate::skills::{self, SkillEntry};
+use crate::stats::{self, Stats};
 use crate::store::Store;
 use crate::system;
 use crate::types::*;
@@ -492,6 +493,13 @@ pub fn system_log_out(app: AppHandle) -> Result<(), String> {
     run_system(&app, system::log_out)
 }
 
+// ---------- System stats ----------
+
+#[tauri::command]
+pub fn system_stats() -> Stats {
+    stats::collect()
+}
+
 // ---------- Analytics ----------
 
 #[tauri::command]
@@ -792,6 +800,11 @@ fn builtin_commands() -> Vec<CommandEntry> {
             id: "show.analytics".into(),
             name: "Show Analytics".into(),
             subtitle: "Top queries, top items, daily activity — local only".into(),
+        },
+        CommandEntry {
+            id: "show.stats".into(),
+            name: "Show System Stats".into(),
+            subtitle: "CPU load, memory, disk, battery, thermal — local snapshot".into(),
         },
         CommandEntry {
             id: "app.check_updates".into(),
