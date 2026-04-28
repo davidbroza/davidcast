@@ -10,6 +10,8 @@ mod files;
 mod git;
 mod hotkey;
 mod icons;
+#[cfg(target_os = "macos")]
+mod macos_perf;
 mod skills;
 mod store;
 mod themes;
@@ -42,6 +44,22 @@ pub fn run() {
             #[cfg(target_os = "macos")]
             {
                 app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+                // Opt out of App Nap: keeps the WebView warm + responsive
+                // so the first ⌃Space after long idle doesn't pay a
+                // wake-up tax (CPU clock-up + page faults). Tiny constant
+                // energy hit; the app is otherwise idle most of the time.
+                macos_perf::opt_out_of_app_nap();
+                // Suppress the slide-in animation on the palette window.
+                // Default Cocoa window-show takes ~250ms — the dominant
+                // remaining cost in our paint_ms metric. With it off the
+                // window appears instantly.
+                if let Some(w) = app.get_webview_window("main") {
+                    if let Ok(ns_window) = w.ns_window() {
+                        unsafe {
+                            macos_perf::disable_window_animation(ns_window);
+                        }
+                    }
+                }
             }
 
             // Load the store.
