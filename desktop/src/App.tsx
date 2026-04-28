@@ -1,5 +1,5 @@
 import { listen } from "@tauri-apps/api/event";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { api, type Settings } from "./api";
 import type { Update } from "@tauri-apps/plugin-updater";
 import { Analytics } from "./components/Analytics";
@@ -65,6 +65,14 @@ export default function App() {
   const [initialFilter, setInitialFilter] = useState<InitialFilter>(null);
   const [session, setSession] = useState<Session>(() => newSession());
 
+  // Cheap content fingerprint of the last `entries` list. We re-fetch on
+  // every palette open so dynamic kinds (agents, vite, docker, clipboard)
+  // stay fresh — but if the resulting list is content-equal to what we
+  // already have, we keep the old array reference. That stops the Fuse
+  // index from rebuilding on every back-to-back ⌃Space, which was the
+  // main source of first-keystroke latency.
+  const entriesFingerprintRef = useRef<string>("");
+
   const refresh = useCallback(async () => {
     const [ws, list, s] = await Promise.all([
       api.listWorkspaces(),
@@ -73,7 +81,11 @@ export default function App() {
     ]);
     setWorkspaces(ws.workspaces);
     setActiveWorkspace(ws.active);
-    setEntries(list);
+    const fp = JSON.stringify(list);
+    if (fp !== entriesFingerprintRef.current) {
+      entriesFingerprintRef.current = fp;
+      setEntries(list);
+    }
     setSettings(s);
   }, []);
 

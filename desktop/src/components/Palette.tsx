@@ -1,5 +1,5 @@
 import Fuse from "fuse.js";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { api, type Settings } from "../api";
 import type { Session } from "../App";
 import type { Item, PaletteEntry, Workspace } from "../types";
@@ -33,6 +33,26 @@ const MAX_RECENTS = 24;
 // anyway, and React reconciling 300+ rows with SVG glyphs + AppIcon
 // effects on every keystroke is a measurable hit on first-letter latency.
 const MAX_VISIBLE = 80;
+
+const FUSE_OPTIONS: import("fuse.js").IFuseOptions<PaletteEntry> = {
+  keys: [
+    { name: "keyword", weight: 3 },
+    { name: "name", weight: 2 },
+    { name: "project", weight: 2 },
+    { name: "image", weight: 1 },
+    { name: "mode", weight: 1.5 },
+    { name: "subtitle", weight: 0.8 },
+    { name: "description", weight: 0.5 },
+    { name: "url", weight: 0.4 },
+    { name: "text", weight: 0.3 },
+    { name: "path", weight: 0.2 },
+    { name: "cwd", weight: 0.2 },
+  ],
+  threshold: 0.35,
+  ignoreLocation: true,
+  includeScore: true,
+  minMatchCharLength: 1,
+};
 
 // Module-level cache so we don't JSON.parse localStorage on every keystroke.
 // touchRecent is the only writer in the app, so cache invalidation is just
@@ -141,6 +161,10 @@ export function Palette({
   const [screenshotMode, setScreenshotMode] = useState(false);
   const [themeEntries, setThemeEntries] = useState<PaletteEntry[]>([]);
   const [skillEntries, setSkillEntries] = useState<PaletteEntry[]>([]);
+  // Perf measurement: stamp time on input event, measure to next paint
+  // via double-rAF. Pill auto-fades. Helps verify first-keystroke is fast.
+  const inputStampRef = useRef<number | null>(null);
+  const [perfText, setPerfText] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const deleteTimer = useRef<number | null>(null);
@@ -260,29 +284,37 @@ export function Palette({
     });
   }, [entries, clipboardEntries, fileEntries, themeEntries, skillEntries, kindFilter, settings]);
 
-  const fuse = useMemo(
-    () =>
-      new Fuse(visibleEntries, {
-        keys: [
-          { name: "keyword", weight: 3 },
-          { name: "name", weight: 2 },
-          { name: "project", weight: 2 },
-          { name: "image", weight: 1 },
-          { name: "mode", weight: 1.5 },
-          { name: "subtitle", weight: 0.8 },
-          { name: "description", weight: 0.5 },
-          { name: "url", weight: 0.4 },
-          { name: "text", weight: 0.3 },
-          { name: "path", weight: 0.2 },
-          { name: "cwd", weight: 0.2 },
-        ],
-        threshold: 0.35,
-        ignoreLocation: true,
-        includeScore: true,
-        minMatchCharLength: 1,
-      }),
-    [visibleEntries]
-  );
+  // Lazy Fuse: building the index over hundreds of entries with 11 keys is
+  // ~30–100ms and was happening synchronously inside useMemo on every
+  // entries change — landing right on the user's first keystroke. Now we
+  // build it only when actually needed (a 3+ char query), and pre-warm on
+  // requestIdleCallback so even the third character doesn't pay the cost.
+  const fuseRef = useRef<{ entries: PaletteEntry[]; fuse: Fuse<PaletteEntry> } | null>(null);
+  const getFuse = (): Fuse<PaletteEntry> => {
+    if (fuseRef.current && fuseRef.current.entries === visibleEntries) {
+      return fuseRef.current.fuse;
+    }
+    const fuse = new Fuse(visibleEntries, FUSE_OPTIONS);
+    fuseRef.current = { entries: visibleEntries, fuse };
+    return fuse;
+  };
+
+  // Pre-warm the Fuse index on idle whenever the entries set changes,
+  // so the 3rd-char path doesn't pay first-build cost.
+  useEffect(() => {
+    type RIC = (cb: () => void, opts?: { timeout: number }) => number;
+    type CIC = (id: number) => void;
+    const ric = (window as unknown as { requestIdleCallback?: RIC }).requestIdleCallback;
+    const cic = (window as unknown as { cancelIdleCallback?: CIC }).cancelIdleCallback;
+    const handle = ric
+      ? ric(() => { getFuse(); }, { timeout: 1500 })
+      : (window.setTimeout(() => { getFuse(); }, 400) as unknown as number);
+    return () => {
+      if (cic && ric) cic(handle);
+      else window.clearTimeout(handle);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visibleEntries]);
 
   const filtered = useMemo(() => {
     // File mode is fully resolved by the backend (fd does the matching);
@@ -334,7 +366,7 @@ export function Palette({
       });
       return matches.slice(0, MAX_VISIBLE);
     }
-    const results = fuse.search(q);
+    const results = getFuse().search(q);
     // Adjust Fuse's raw match score with two boosts:
     //   - prefix bonus: strong (-0.4) — typing "i" should land on iTerm,
     //     not on something that fuzzy-contains an i three chars deep.
@@ -359,11 +391,33 @@ export function Palette({
       return nameOf(a.item).localeCompare(nameOf(b.item));
     });
     return scored.slice(0, MAX_VISIBLE).map((r) => r.item);
-  }, [query, fuse, visibleEntries, kindFilter]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query, visibleEntries, kindFilter]);
 
   useEffect(() => {
     setSelected(0);
   }, [query]);
+
+  // Measure input → paint after filtered changes. Double-rAF waits for
+  // commit + paint. Pill shows briefly so we can sanity-check live.
+  useLayoutEffect(() => {
+    if (inputStampRef.current == null) return;
+    const start = inputStampRef.current;
+    inputStampRef.current = null;
+    const r1 = requestAnimationFrame(() => {
+      const r2 = requestAnimationFrame(() => {
+        const ms = performance.now() - start;
+        const text = `${ms.toFixed(0)}ms · ${filtered.length}`;
+        // eslint-disable-next-line no-console
+        console.log(`[davidcast perf] keystroke→paint ${text}`);
+        setPerfText(text);
+        window.setTimeout(() => setPerfText(null), 900);
+      });
+      // best-effort cleanup if unmounted between frames
+      return () => cancelAnimationFrame(r2);
+    });
+    return () => cancelAnimationFrame(r1);
+  }, [filtered]);
 
   useEffect(() => {
     setSelected((s) => {
@@ -832,7 +886,10 @@ export function Palette({
         <input
           ref={inputRef}
           value={query}
-          onChange={(e) => setQuery(e.target.value)}
+          onChange={(e) => {
+            inputStampRef.current = performance.now();
+            setQuery(e.target.value);
+          }}
           placeholder={placeholderFor(kindFilter)}
           autoFocus
           spellCheck={false}
@@ -909,6 +966,26 @@ export function Palette({
         />
       )}
 
+      {perfText && (
+        <div
+          style={{
+            position: "absolute",
+            top: 8,
+            right: 10,
+            fontSize: 10,
+            fontFamily: "ui-monospace, SFMono-Regular, monospace",
+            color: "rgba(255,255,255,0.55)",
+            background: "rgba(0,0,0,0.35)",
+            padding: "2px 6px",
+            borderRadius: 4,
+            pointerEvents: "none",
+            letterSpacing: 0.2,
+            zIndex: 50,
+          }}
+        >
+          {perfText}
+        </div>
+      )}
       {toast && <div className="toast">✓ {toast}</div>}
       {pendingDelete && (
         <div className="confirm-banner">
