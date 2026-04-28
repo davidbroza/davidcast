@@ -18,7 +18,7 @@
 use objc2::rc::Retained;
 use objc2::runtime::{NSObjectProtocol, ProtocolObject};
 use objc2_app_kit::{
-    NSMainMenuWindowLevel, NSWindow, NSWindowAnimationBehavior, NSWindowCollectionBehavior,
+    NSPopUpMenuWindowLevel, NSWindow, NSWindowAnimationBehavior, NSWindowCollectionBehavior,
 };
 use objc2_foundation::{NSActivityOptions, NSProcessInfo, NSString};
 use std::sync::OnceLock;
@@ -40,8 +40,14 @@ pub unsafe fn disable_window_animation(ns_window: *mut std::ffi::c_void) {
 /// Make the palette appear on every Space and float over fullscreen apps.
 /// Without this, ⌥Space does nothing while another app is in macOS
 /// fullscreen — the palette opens on the original Space and the user sees
-/// no UI. With CanJoinAllSpaces + FullScreenAuxiliary + MainMenu level it
-/// appears on top of fullscreen content, like Raycast or Spotlight.
+/// no UI.
+///
+/// **Must be called after every `show()`**, not just at app setup.
+/// Tauri's `alwaysOnTop: true` flag re-applies `NSFloatingWindowLevel`
+/// (3) when the window is shown, which sits *under* fullscreen content
+/// and overrides whatever level we set during setup. Re-applying the
+/// higher `NSPopUpMenuWindowLevel` (101 — same level dropdown menus
+/// use) on every show keeps the palette on top.
 ///
 /// # Safety
 /// Same as `disable_window_animation`.
@@ -54,7 +60,7 @@ pub unsafe fn make_visible_over_fullscreen(ns_window: *mut std::ffi::c_void) {
         | NSWindowCollectionBehavior::FullScreenAuxiliary
         | NSWindowCollectionBehavior::Stationary;
     window.setCollectionBehavior(behavior);
-    window.setLevel(NSMainMenuWindowLevel as isize);
+    window.setLevel(NSPopUpMenuWindowLevel as isize);
 }
 
 /// Holds the activity returned by NSProcessInfo so it stays retained for

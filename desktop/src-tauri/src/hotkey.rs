@@ -75,6 +75,7 @@ pub fn toggle_palette(app: &AppHandle) {
             let _ = w.center();
             let _ = w.show();
             let _ = w.set_focus();
+            apply_fullscreen_overlay(&w);
             // Nudge the frontend to reset its state (clear query, refetch).
             let _ = app.emit("palette:show", ());
         }
@@ -88,5 +89,22 @@ pub fn open_clipboard(app: &AppHandle) {
     let _ = w.center();
     let _ = w.show();
     let _ = w.set_focus();
+    apply_fullscreen_overlay(&w);
     let _ = app.emit("clipboard:show", ());
 }
+
+/// Re-apply the NSWindow flags that make the palette float over
+/// fullscreen apps. Must run *after* `show()` because Tauri's
+/// `alwaysOnTop: true` resets the level back to `NSFloatingWindowLevel`
+/// (3) on every show, which sits below fullscreen content.
+#[cfg(target_os = "macos")]
+fn apply_fullscreen_overlay(w: &tauri::WebviewWindow) {
+    if let Ok(ns_window) = w.ns_window() {
+        unsafe {
+            crate::macos_perf::make_visible_over_fullscreen(ns_window);
+        }
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn apply_fullscreen_overlay(_: &tauri::WebviewWindow) {}
