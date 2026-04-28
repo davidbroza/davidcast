@@ -1,6 +1,13 @@
 # Planned features — pick up on the other machine
 
-These are two feature asks recorded while shipping phase 1. They are **not yet implemented**. Everything above in `PLAN.md` is still authoritative for the phased roadmap; this file is a scratchpad for the next two things to build.
+These are feature asks recorded while shipping phase 1. They are **not yet implemented**. Everything above in `PLAN.md` is still authoritative for the phased roadmap; this file is a scratchpad for the next two things to build.
+
+---
+
+## Backlog (small, well-scoped)
+
+- **Giphy search** — built-in command `giphy.search`. Type a query, hit ↵, copy the GIF URL or animated bitmap to clipboard, palette stays open. Needs a Giphy API key (their dev tier is free) — wire as `Config::giphy_api_key` with a Preferences input. Without a key, the command shows a one-line "set your Giphy API key in Preferences" hint and links out.
+- **Move snippet / quicklink to another workspace** — keyboard shortcut from the edit form (or a side action), opens a workspace picker, performs the move (atomic file move between `workspaces/<src>/items.json` and `workspaces/<dst>/items.json` with the same `id`/`rev` so the sync engine sees a single op).
 
 ---
 

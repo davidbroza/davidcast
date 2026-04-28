@@ -65,6 +65,7 @@ pub struct Settings {
     pub show_quicklinks_inline: bool,
     pub screenshot_dirs: Vec<String>,
     pub check_updates_on_launch: bool,
+    pub bg_image_override: Option<String>,
 }
 
 #[tauri::command]
@@ -77,6 +78,7 @@ pub fn get_settings(store: StoreState<'_>) -> Settings {
         show_quicklinks_inline: s.config.show_quicklinks_inline,
         screenshot_dirs: s.config.screenshot_dirs.clone(),
         check_updates_on_launch: s.config.check_updates_on_launch,
+        bg_image_override: s.config.bg_image_override.clone(),
     }
 }
 
@@ -84,6 +86,19 @@ pub fn get_settings(store: StoreState<'_>) -> Settings {
 pub fn set_check_updates_on_launch(value: bool, store: StoreState<'_>) -> Result<(), String> {
     let mut s = store.write();
     s.config.check_updates_on_launch = value;
+    s.save_config().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn set_bg_image_override(
+    value: Option<String>,
+    store: StoreState<'_>,
+) -> Result<(), String> {
+    let mut s = store.write();
+    s.config.bg_image_override = value
+        .as_ref()
+        .map(|v| v.trim().to_string())
+        .filter(|v| !v.is_empty());
     s.save_config().map_err(|e| e.to_string())
 }
 

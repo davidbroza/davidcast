@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { api } from "../api";
 import type { AnalyticsSummary } from "../types";
 import { fmtKind, fmtMs, fmtPct } from "../utils";
+import { Screen } from "./Screen";
 
 type Props = {
   onClose: () => void;
@@ -33,23 +34,6 @@ export function Analytics({ onClose, onError }: Props) {
     refresh();
   }, [refresh]);
 
-  // Window-level Escape — see Preferences.tsx for the rationale.
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        e.preventDefault();
-        onClose();
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
-
-  const rootRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    rootRef.current?.focus();
-  }, []);
-
   async function clearLog() {
     if (
       !window.confirm(
@@ -72,15 +56,8 @@ export function Analytics({ onClose, onError }: Props) {
   const maxDay = data?.daily_opens.reduce((m, d) => Math.max(m, d.count), 0) ?? 0;
 
   return (
-    <div className="palette analytics-inline" ref={rootRef} tabIndex={-1}>
-      <div className="topbar">
-        <div className="prefs-title">Analytics · davidcast</div>
-        <div className="topbar-spacer" />
-        <span className="topbar-hint">esc to close</span>
-      </div>
-
-      <div className="prefs-scroll">
-        <div className="analytics">
+    <Screen kind="analytics" title="Analytics · davidcast" onClose={onClose}>
+      <div className="analytics">
           {loading && <div className="analytics-empty">Loading…</div>}
 
           {!loading && data && data.total_events === 0 && (
@@ -244,8 +221,7 @@ export function Analytics({ onClose, onError }: Props) {
               </p>
             </>
           )}
-        </div>
       </div>
-    </div>
+    </Screen>
   );
 }

@@ -156,6 +156,87 @@ body[data-view="palette"] {
   border-bottom: 1px solid var(--border);
 }
 
+/* ---------- Theme-scoped polish ----------
+ * Per-theme tweaks that go beyond color tokens — chunky chrome, animated
+ * accents, bespoke typography. Targeted via `[data-theme]` on <html>
+ * (set by applyTheme in App.tsx) so they only fire when the named theme
+ * is active and stay out of every other theme's way. */
+
+/* LCARS — Star Trek bridge UI.
+ * - Chunky orange endcap on the left of the top bar (the "1701-D" pill)
+ * - Pulsing accent strip under the search input as a "live" indicator
+ * - All-caps top-bar text in a Helvetica-Compressed-y stack */
+html[data-theme="lcars"] .topbar {
+  position: relative;
+  padding-left: 92px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 600;
+}
+html[data-theme="lcars"] .topbar::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 78px;
+  background: var(--accent);
+  border-top-left-radius: 14px;
+  border-bottom-right-radius: 30px;
+  pointer-events: none;
+}
+html[data-theme="lcars"] .topbar::after {
+  content: "1701-D";
+  position: absolute;
+  top: 8px;
+  left: 14px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  color: #000;
+  pointer-events: none;
+}
+html[data-theme="lcars"] .search {
+  position: relative;
+  border-bottom: none;
+}
+html[data-theme="lcars"] .search::after {
+  content: "";
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  bottom: 0;
+  height: 3px;
+  background: linear-gradient(
+    90deg,
+    var(--accent) 0%,
+    var(--accent) var(--lcars-flow, 0%),
+    rgba(255, 153, 0, 0.18) var(--lcars-flow, 0%),
+    rgba(255, 153, 0, 0.18) 100%
+  );
+  border-radius: 2px;
+  animation: lcars-flow 2.4s cubic-bezier(0.6, 0.05, 0.4, 0.95) infinite;
+}
+@keyframes lcars-flow {
+  0% { --lcars-flow: 6%; }
+  50% { --lcars-flow: 100%; }
+  100% { --lcars-flow: 6%; }
+}
+@property --lcars-flow {
+  syntax: "<percentage>";
+  inherits: false;
+  initial-value: 6%;
+}
+html[data-theme="lcars"] .row.active {
+  border-left: 4px solid var(--accent);
+  padding-left: 10px;
+}
+html[data-theme="lcars"] .kind-badge {
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  border-radius: 999px;
+}
+
 /* Confetti layer — sits inside body so it's clipped to the rounded
  * palette mask. Pointer-events:none so it can never intercept clicks. */
 .confetti-layer {

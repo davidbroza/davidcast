@@ -1,4 +1,5 @@
-import { useEffect, useRef, type ReactNode } from "react";
+import type { ReactNode } from "react";
+import { Screen } from "./Screen";
 
 type Props = {
   onClose: () => void;
@@ -232,33 +233,9 @@ const GROUPS: Group[] = [
 ];
 
 export function Help({ onClose }: Props) {
-  // Window-level Escape — see Preferences.tsx for the rationale.
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        e.preventDefault();
-        onClose();
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
-
-  const rootRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    rootRef.current?.focus();
-  }, []);
-
   return (
-    <div className="palette help-inline" ref={rootRef} tabIndex={-1}>
-      <div className="topbar">
-        <div className="prefs-title">Help · davidcast</div>
-        <div className="topbar-spacer" />
-        <span className="topbar-hint">esc to close</span>
-      </div>
-
-      <div className="prefs-scroll">
-        <div className="help">
+    <Screen kind="help" title="Help · davidcast" onClose={onClose}>
+      <div className="help">
           {GROUPS.map((group) => (
             <section key={group.title} className="help-group">
               <h2>{group.title}</h2>
@@ -285,7 +262,6 @@ export function Help({ onClose }: Props) {
             davidcast — local-first launcher · ⌥ Space toggles the palette
           </div>
         </div>
-      </div>
-    </div>
+    </Screen>
   );
 }

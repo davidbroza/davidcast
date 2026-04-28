@@ -224,6 +224,7 @@ pub fn run() {
             commands::set_show_quicklinks_inline,
             commands::set_screenshot_dirs,
             commands::set_check_updates_on_launch,
+            commands::set_bg_image_override,
             commands::get_backup_settings,
             commands::set_backup_remote,
             commands::set_backup_branch,

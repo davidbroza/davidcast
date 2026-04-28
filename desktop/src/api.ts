@@ -19,6 +19,7 @@ export interface Settings {
   show_quicklinks_inline: boolean;
   screenshot_dirs: string[];
   check_updates_on_launch: boolean;
+  bg_image_override: string | null;
 }
 
 export const api = {
@@ -36,6 +37,8 @@ export const api = {
     invoke<void>("set_screenshot_dirs", { value }),
   setCheckUpdatesOnLaunch: (value: boolean) =>
     invoke<void>("set_check_updates_on_launch", { value }),
+  setBgImageOverride: (value: string | null) =>
+    invoke<void>("set_bg_image_override", { value }),
 
   // Backup (git) — local commands all touch the system `git` CLI; auth
   // is whatever lets you `git push` from terminal. No credential storage.

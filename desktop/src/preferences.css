@@ -191,6 +191,57 @@
   text-align: center;
 }
 
+/* Background picker — preset tiles */
+.prefs-help {
+  color: var(--fg-dim);
+  font-size: 12px;
+  margin: 0 0 10px;
+  line-height: 1.5;
+}
+.prefs-bg-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 10px;
+}
+.prefs-bg-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--fg);
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  transition: border-color 0.12s ease, background 0.12s ease;
+}
+.prefs-bg-tile:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+.prefs-bg-tile.active {
+  border-color: var(--accent);
+  background: rgba(255, 255, 255, 0.07);
+}
+.prefs-bg-swatch {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border-radius: 5px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background-size: cover;
+  background-position: center;
+}
+.prefs-bg-label {
+  font-size: 11px;
+  color: var(--fg-dim);
+  text-align: center;
+}
+.prefs-bg-tile.active .prefs-bg-label {
+  color: var(--fg);
+}
+
 .prefs-error {
   background: rgba(239, 106, 106, 0.12);
   border: 1px solid rgba(239, 106, 106, 0.3);

@@ -42,11 +42,55 @@ function loadCachedEntries(): PaletteEntry[] {
 /// Set CSS variables on the document root from a theme. Mirrors the
 /// `--<name>` shape used in palette.css; everything kept on the root
 /// applies to both the palette and prefs windows in this bundle.
-export function applyTheme(theme: Theme) {
+///
+/// `override.bgImage`, if set, takes precedence over the theme's own
+/// `bg-image` token — that's how the Preferences "Background" picker
+/// hangs custom CSS off any theme without forking the theme itself.
+/// The override is also cached in localStorage so theme-switch hover
+/// previews (which call applyTheme without going through App's
+/// settings state) preserve the user's choice.
+const BG_OVERRIDE_KEY = "davidcast.bg_image_override";
+
+export function setBgImageOverrideCache(value: string | null) {
+  try {
+    if (value && value.trim()) localStorage.setItem(BG_OVERRIDE_KEY, value);
+    else localStorage.removeItem(BG_OVERRIDE_KEY);
+  } catch {
+    // localStorage may be unavailable in some sandboxes — non-fatal.
+  }
+}
+
+function readBgImageOverrideCache(): string | null {
+  try {
+    return localStorage.getItem(BG_OVERRIDE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function applyTheme(
+  theme: Theme,
+  override?: { bgImage?: string | null },
+) {
   const root = document.documentElement;
   for (const [k, v] of Object.entries(theme.tokens)) {
     root.style.setProperty(`--${k}`, v);
   }
+  // Resolve effective override: explicit arg > localStorage cache > none.
+  const effective =
+    override?.bgImage !== undefined
+      ? override.bgImage
+      : readBgImageOverrideCache();
+  if (effective != null && effective !== "") {
+    root.style.setProperty("--bg-image", effective);
+  } else if (!theme.tokens["bg-image"]) {
+    // No override + theme didn't ship one — clear stale value so we
+    // don't carry a previous theme's gradient onto a plain one.
+    root.style.removeProperty("--bg-image");
+  }
+  // Theme id on documentElement so theme-scoped CSS (LCARS endcaps,
+  // etc.) can target a single theme without us forking the markup.
+  root.dataset.theme = theme.id;
 }
 
 export type Session = {
@@ -90,6 +134,7 @@ export default function App() {
     show_quicklinks_inline: true,
     screenshot_dirs: [],
     check_updates_on_launch: true,
+    bg_image_override: null,
   });
   const [update, setUpdate] = useState<Update | null>(null);
   const [view, setView] = useState<View>({ kind: "palette" });
@@ -143,10 +188,19 @@ export default function App() {
     refresh().catch((e) => setError(String(e)));
   }, [refresh]);
 
-  // Pull and apply the active theme on mount. Failures fall back to the
-  // CSS defaults baked into palette.css.
+  // Pull and apply the active theme on mount, layering any user
+  // background override on top. Failures fall back to the CSS defaults
+  // baked into palette.css.
   useEffect(() => {
-    api.getActiveTheme().then(applyTheme).catch(() => {});
+    Promise.all([api.getActiveTheme(), api.getSettings()])
+      .then(([theme, settings]) => {
+        // Hydrate the localStorage cache from disk so subsequent
+        // applyTheme calls (theme preview, commit) pick up the
+        // override without us threading state through every caller.
+        setBgImageOverrideCache(settings.bg_image_override);
+        applyTheme(theme, { bgImage: settings.bg_image_override });
+      })
+      .catch(() => {});
   }, []);
 
   // Check for updates on launch, gated by user setting. Silent when no

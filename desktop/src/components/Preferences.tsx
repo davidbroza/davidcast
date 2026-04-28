@@ -1,6 +1,7 @@
 import { disable, enable, isEnabled } from "@tauri-apps/plugin-autostart";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { Screen } from "./Screen";
 import { api, type Settings } from "../api";
 import type { Workspace } from "../types";
 import { relativeTime } from "../utils";
@@ -118,35 +119,9 @@ export function Preferences({ onClose, onError }: Props) {
     }
   }
 
-  // Window-level Escape so the user doesn't have to click into the panel
-  // first to give it focus. Falls back to onKeyDown on the inner div for
-  // events that originate inside (inputs, selects).
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        e.preventDefault();
-        onClose();
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
-
-  const rootRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    rootRef.current?.focus();
-  }, []);
-
   return (
-    <div className="palette prefs-inline" ref={rootRef} tabIndex={-1}>
-      <div className="topbar">
-        <div className="prefs-title">Preferences</div>
-        <div className="topbar-spacer" />
-        <span className="topbar-hint">esc to close</span>
-      </div>
-
-      <div className="prefs-scroll">
-        <div className="prefs">
+    <Screen kind="prefs" title="Preferences" onClose={onClose}>
+      <div className="prefs">
           <h2>General</h2>
           <section>
             <div className="prefs-row">
@@ -313,6 +288,9 @@ export function Preferences({ onClose, onError }: Props) {
             </div>
           </section>
 
+          <h2>Background</h2>
+          <BackgroundSection onError={onError} />
+
           <h2>Workspaces</h2>
           <section>
             {workspaces.map((w) => (
@@ -352,9 +330,152 @@ export function Preferences({ onClose, onError }: Props) {
           <div className="prefs-meta">
             Store: <code>~/Library/Application Support/davidcast/</code>
           </div>
-        </div>
       </div>
-    </div>
+    </Screen>
+  );
+}
+
+// Curated background presets — what most people want without typing
+// CSS. The values are passed verbatim to `--bg-image`; the var is
+// composited over the active theme's `--bg`.
+const BG_PRESETS: Array<{ id: string; label: string; value: string | null }> = [
+  { id: "theme", label: "Use theme default", value: null },
+  {
+    id: "scanlines",
+    label: "Holographic scanlines",
+    value:
+      "repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.04) 0 1px, transparent 1px 3px)",
+  },
+  {
+    id: "starfield",
+    label: "Starfield",
+    value:
+      "radial-gradient(circle at 20% 30%, rgba(255, 255, 255, 0.30) 0 1px, transparent 2px), radial-gradient(circle at 70% 60%, rgba(255, 255, 255, 0.25) 0 1px, transparent 2px), radial-gradient(circle at 40% 80%, rgba(255, 255, 255, 0.22) 0 1px, transparent 2px), radial-gradient(circle at 90% 20%, rgba(255, 255, 255, 0.20) 0 1px, transparent 2px)",
+  },
+  {
+    id: "cyberpunk-grid",
+    label: "Cyberpunk grid",
+    value:
+      "linear-gradient(rgba(0, 240, 255, 0.10) 1px, transparent 1px), linear-gradient(90deg, rgba(255, 0, 170, 0.10) 1px, transparent 1px)",
+  },
+  {
+    id: "plasma",
+    label: "Plasma glow",
+    value:
+      "radial-gradient(ellipse at top left, rgba(120, 80, 220, 0.35), transparent 55%), radial-gradient(ellipse at bottom right, rgba(220, 80, 160, 0.30), transparent 55%)",
+  },
+  {
+    id: "nebula",
+    label: "Nebula",
+    value:
+      "radial-gradient(ellipse at 30% 20%, rgba(80, 180, 255, 0.20), transparent 50%), radial-gradient(ellipse at 70% 80%, rgba(255, 100, 200, 0.20), transparent 50%), radial-gradient(ellipse at 50% 50%, rgba(60, 30, 100, 0.30), transparent 60%)",
+  },
+];
+
+function BackgroundSection({ onError }: { onError: (s: string) => void }) {
+  const [override, setOverride] = useState<string | null>(null);
+  const [custom, setCustom] = useState<string>("");
+
+  useEffect(() => {
+    api
+      .getSettings()
+      .then((s) => {
+        setOverride(s.bg_image_override);
+        if (s.bg_image_override && !BG_PRESETS.some((p) => p.value === s.bg_image_override)) {
+          setCustom(s.bg_image_override);
+        }
+      })
+      .catch((e) => onError(String(e)));
+  }, [onError]);
+
+  async function commit(value: string | null) {
+    try {
+      await api.setBgImageOverride(value);
+      setOverride(value);
+      // Re-apply current theme so the bg picks up immediately. The
+      // localStorage cache also gets refreshed.
+      const cacheModule = await import("../App");
+      cacheModule.setBgImageOverrideCache(value);
+      const theme = await api.getActiveTheme();
+      cacheModule.applyTheme(theme, { bgImage: value });
+    } catch (e) {
+      onError(String(e));
+    }
+  }
+
+  const activePresetId =
+    override === null
+      ? "theme"
+      : BG_PRESETS.find((p) => p.value === override)?.id ?? "custom";
+
+  return (
+    <section>
+      <p className="prefs-help">
+        Layers a CSS gradient or pattern on top of the active theme&apos;s
+        base color. Use this to dial in a sci-fi vibe without forking a
+        theme. Picking a preset stays through theme switches.
+      </p>
+      <div className="prefs-bg-grid">
+        {BG_PRESETS.map((p) => (
+          <button
+            key={p.id}
+            type="button"
+            className={`prefs-bg-tile ${activePresetId === p.id ? "active" : ""}`}
+            onClick={() => commit(p.value)}
+          >
+            <span
+              className="prefs-bg-swatch"
+              style={
+                p.value
+                  ? {
+                      backgroundImage: p.value,
+                      backgroundColor: "var(--bg-solid)",
+                    }
+                  : { backgroundColor: "var(--bg-solid)" }
+              }
+            />
+            <span className="prefs-bg-label">{p.label}</span>
+          </button>
+        ))}
+        <button
+          key="custom"
+          type="button"
+          className={`prefs-bg-tile ${activePresetId === "custom" ? "active" : ""}`}
+          onClick={() => custom.trim() && commit(custom.trim())}
+        >
+          <span
+            className="prefs-bg-swatch"
+            style={
+              custom.trim()
+                ? {
+                    backgroundImage: custom,
+                    backgroundColor: "var(--bg-solid)",
+                  }
+                : { backgroundColor: "var(--bg-solid)" }
+            }
+          />
+          <span className="prefs-bg-label">Custom</span>
+        </button>
+      </div>
+      <div className="prefs-row" style={{ marginTop: 10 }}>
+        <div className="label">
+          <div className="label-title">Custom CSS</div>
+          <div className="label-sub">
+            Anything valid for <code>background-image</code>:{" "}
+            <code>linear-gradient(...)</code>, <code>url(&quot;...&quot;)</code>,
+            stacked layers separated by commas.
+          </div>
+        </div>
+        <input
+          type="text"
+          value={custom}
+          onChange={(e) => setCustom(e.target.value)}
+          onBlur={() => custom.trim() && commit(custom.trim())}
+          placeholder="linear-gradient(135deg, #1a1a2e, #16213e)"
+          style={{ flex: 1, fontFamily: "var(--font-family-mono)", fontSize: 12 }}
+        />
+      </div>
+    </section>
   );
 }
 

@@ -83,6 +83,11 @@ pub struct Config {
     /// `light`, `high-contrast`) or any user-imported theme filename.
     #[serde(default = "default_theme_id")]
     pub theme: String,
+    /// User override for the palette's `--bg-image` token. When set,
+    /// it replaces whatever the active theme provides (`None` keeps the
+    /// theme's value). Free-form CSS — gradient strings or `url("…")`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bg_image_override: Option<String>,
     /// Whether to ping the GitHub Releases updater endpoint at startup.
     /// Manual "Check for Updates" still works either way.
     #[serde(default = "default_true")]
@@ -179,6 +184,7 @@ impl Default for Config {
             show_quicklinks_inline: true,
             screenshot_dirs: default_screenshot_dirs(),
             theme: default_theme_id(),
+            bg_image_override: None,
             check_updates_on_launch: true,
             backup: BackupConfig::default(),
         }
