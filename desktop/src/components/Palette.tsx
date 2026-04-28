@@ -73,6 +73,17 @@ const FUSE_OPTIONS: import("fuse.js").IFuseOptions<PaletteEntry> = {
 // "update both sides whenever we write."
 let recentsCache: Record<string, number> | null = null;
 
+// Run a side-effect during idle time. Used for analytics dispatches that
+// shouldn't compete with paint or input handling — even invoke()'s
+// synchronous serialize step is enough to nudge a frame budget.
+function scheduleIdle(fn: () => void) {
+  type RIC = (cb: () => void, opts?: { timeout: number }) => number;
+  const ric = (window as unknown as { requestIdleCallback?: RIC })
+    .requestIdleCallback;
+  if (ric) ric(fn, { timeout: 2000 });
+  else window.setTimeout(fn, 0);
+}
+
 function loadRecents(): Record<string, number> {
   if (recentsCache) return recentsCache;
   try {
@@ -182,6 +193,10 @@ export function Palette({
   // Perf measurement: stamp time on input event, measure to next paint
   // via double-rAF. Pill auto-fades. Helps verify first-keystroke is fast.
   const inputStampRef = useRef<number | null>(null);
+  // Tracks whether the next keystroke is the first one in the current
+  // session — that's the one the user feels as "open + type". Subsequent
+  // keystrokes are warm-path. Logged distinctly in analytics.
+  const firstKeystrokeRef = useRef(true);
   const [perfText, setPerfText] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
@@ -432,18 +447,40 @@ export function Palette({
     if (inputStampRef.current == null) return;
     const start = inputStampRef.current;
     inputStampRef.current = null;
+    const wasFirst = firstKeystrokeRef.current;
+    firstKeystrokeRef.current = false;
+    const sessionId = session.id;
+    const qLen = deferredQuery.length;
+    const resultCount = filtered.length;
+    const filterKind = kindFilter;
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
         const listMs = performance.now() - start;
         const inputMs = lastInputPaintRef.current ?? listMs;
-        const text = `in ${inputMs.toFixed(0)} · list ${listMs.toFixed(0)} · ${filtered.length}`;
+        const text = `in ${inputMs.toFixed(0)} · list ${listMs.toFixed(0)} · ${resultCount}`;
         // eslint-disable-next-line no-console
-        console.log(`[davidcast perf] ${text}`);
+        console.log(`[davidcast perf] ${text}${wasFirst ? " [FIRST]" : ""}`);
         setPerfText(text);
         window.setTimeout(() => setPerfText(null), 1200);
+        // Defer the analytics IPC to idle time. invoke() does a synchronous
+        // serialize step that, while small, has no business running on the
+        // keystroke→paint critical path. By the time idle fires we've
+        // already painted; the metric write happens off-screen-time.
+        scheduleIdle(() => {
+          api
+            .analyticsRecord(sessionId, "perf_keystroke", {
+              input_ms: Number(inputMs.toFixed(2)),
+              list_ms: Number(listMs.toFixed(2)),
+              result_count: resultCount,
+              q_len: qLen,
+              first_in_session: wasFirst,
+              kind_filter: filterKind,
+            })
+            .catch(() => {});
+        });
       });
     });
-  }, [filtered]);
+  }, [filtered, deferredQuery, kindFilter, session.id]);
 
   useEffect(() => {
     setSelected((s) => {
@@ -490,6 +527,7 @@ export function Palette({
       setQuery("");
       setSelected(0);
       setKindFilter(null);
+      firstKeystrokeRef.current = true;
     };
     window.addEventListener("blur", onBlur);
     return () => window.removeEventListener("blur", onBlur);
