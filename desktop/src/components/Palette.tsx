@@ -1,5 +1,14 @@
 import Fuse from "fuse.js";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import {
+  memo,
+  useCallback,
+  useDeferredValue,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { api, type Settings } from "../api";
 import type { Session } from "../App";
 import type { Item, PaletteEntry, Workspace } from "../types";
@@ -33,6 +42,11 @@ const MAX_RECENTS = 24;
 // anyway, and React reconciling 300+ rows with SVG glyphs + AppIcon
 // effects on every keystroke is a measurable hit on first-letter latency.
 const MAX_VISIBLE = 80;
+
+// Tighter cap for the empty-query view — the user sees this *before* the
+// first keystroke, so painting 80 rows just to immediately diff most of
+// them away is wasted work. 24 covers all visible rows + a buffer.
+const MAX_VISIBLE_EMPTY = 24;
 
 const FUSE_OPTIONS: import("fuse.js").IFuseOptions<PaletteEntry> = {
   keys: [
@@ -152,6 +166,10 @@ export function Palette({
   onError,
 }: Props) {
   const [query, setQuery] = useState("");
+  // Filter against a deferred query so the input updates paint before the
+  // list re-renders. On first keystroke the user sees the character land
+  // instantly; the (cheap) list update follows on the next frame.
+  const deferredQuery = useDeferredValue(query);
   const [selected, setSelected] = useState(0);
   const [toast, setToast] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<Item | null>(null);
@@ -320,7 +338,7 @@ export function Palette({
     // File mode is fully resolved by the backend (fd does the matching);
     // skip Fuse entirely so we don't filter the results twice.
     if (kindFilter === "file") return visibleEntries.slice(0, MAX_VISIBLE);
-    const q = query.trim();
+    const q = deferredQuery.trim();
     const recents = loadRecents();
     if (!q) {
       // Empty query order:
@@ -337,7 +355,7 @@ export function Palette({
         if (pa !== pb) return pa - pb;
         return nameOf(a).localeCompare(nameOf(b));
       });
-      return ranked.slice(0, MAX_VISIBLE);
+      return ranked.slice(0, MAX_VISIBLE_EMPTY);
     }
     const ql = q.toLowerCase();
     // Short queries: skip Fuse entirely. With threshold 0.35 + ignoreLocation
@@ -392,31 +410,39 @@ export function Palette({
     });
     return scored.slice(0, MAX_VISIBLE).map((r) => r.item);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [query, visibleEntries, kindFilter]);
+  }, [deferredQuery, visibleEntries, kindFilter]);
 
-  useEffect(() => {
-    setSelected(0);
+  // Two-part measurement:
+  //   - input paint: time from keystroke to the input element committing
+  //     with the new char. This is what the user *feels*.
+  //   - list paint: time from keystroke to the filtered list committing.
+  //     With useDeferredValue these can be a frame or two apart.
+  // Double-rAF on each to wait for actual paint, not just commit.
+  const lastInputPaintRef = useRef<number | null>(null);
+  useLayoutEffect(() => {
+    if (inputStampRef.current == null) return;
+    const start = inputStampRef.current;
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        lastInputPaintRef.current = performance.now() - start;
+      });
+    });
   }, [query]);
-
-  // Measure input → paint after filtered changes. Double-rAF waits for
-  // commit + paint. Pill shows briefly so we can sanity-check live.
   useLayoutEffect(() => {
     if (inputStampRef.current == null) return;
     const start = inputStampRef.current;
     inputStampRef.current = null;
-    const r1 = requestAnimationFrame(() => {
-      const r2 = requestAnimationFrame(() => {
-        const ms = performance.now() - start;
-        const text = `${ms.toFixed(0)}ms · ${filtered.length}`;
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        const listMs = performance.now() - start;
+        const inputMs = lastInputPaintRef.current ?? listMs;
+        const text = `in ${inputMs.toFixed(0)} · list ${listMs.toFixed(0)} · ${filtered.length}`;
         // eslint-disable-next-line no-console
-        console.log(`[davidcast perf] keystroke→paint ${text}`);
+        console.log(`[davidcast perf] ${text}`);
         setPerfText(text);
-        window.setTimeout(() => setPerfText(null), 900);
+        window.setTimeout(() => setPerfText(null), 1200);
       });
-      // best-effort cleanup if unmounted between frames
-      return () => cancelAnimationFrame(r2);
     });
-    return () => cancelAnimationFrame(r1);
   }, [filtered]);
 
   useEffect(() => {
@@ -856,6 +882,21 @@ export function Palette({
   const selectedEntry = filtered[selected];
   const showSidePreview = screenshotMode || kindFilter === "skill";
 
+  // Stable refs / handlers so memo'd Row doesn't re-render unnecessarily.
+  // execute() is a closure over half the component's state — capturing it
+  // in a ref means Row's onClick stays referentially stable across renders.
+  const filteredRef = useRef(filtered);
+  filteredRef.current = filtered;
+  const executeRef = useRef(execute);
+  executeRef.current = execute;
+  const handleHover = useCallback((i: number) => {
+    if (mouseActiveRef.current) setSelected(i);
+  }, []);
+  const handleClick = useCallback((i: number) => {
+    const entry = filteredRef.current[i];
+    if (entry) executeRef.current(entry);
+  }, []);
+
   return (
     <div
       className={`palette${showSidePreview ? " with-preview" : ""}`}
@@ -889,6 +930,9 @@ export function Palette({
           onChange={(e) => {
             inputStampRef.current = performance.now();
             setQuery(e.target.value);
+            // Batch the selection reset into the same render so we don't
+            // spend an extra commit fixing it up.
+            setSelected(0);
           }}
           placeholder={placeholderFor(kindFilter)}
           autoFocus
@@ -912,10 +956,9 @@ export function Palette({
               key={entryKey(entry)}
               entry={entry}
               selected={i === selected}
-              onHover={() => {
-                if (mouseActiveRef.current) setSelected(i);
-              }}
-              onClick={() => execute(entry)}
+              index={i}
+              onHover={handleHover}
+              onClick={handleClick}
             />
           ))
         )}
@@ -1124,16 +1167,18 @@ function placeholderFor(k: KindFilter): string {
 
 // ---------- Row ----------
 
-function Row({
+const Row = memo(function Row({
   entry,
   selected,
+  index,
   onHover,
   onClick,
 }: {
   entry: PaletteEntry;
   selected: boolean;
-  onHover: () => void;
-  onClick: () => void;
+  index: number;
+  onHover: (i: number) => void;
+  onClick: (i: number) => void;
 }) {
   let name = "";
   let sub = "";
@@ -1207,8 +1252,8 @@ function Row({
   return (
     <div
       className={`row ${selected ? "active" : ""}`}
-      onClick={onClick}
-      onMouseEnter={onHover}
+      onClick={() => onClick(index)}
+      onMouseEnter={() => onHover(index)}
     >
       <EntryIcon entry={entry} />
       <div className="row-main">
@@ -1221,7 +1266,7 @@ function Row({
       </div>
     </div>
   );
-}
+});
 
 function EntryIcon({ entry }: { entry: PaletteEntry }) {
   if (isApp(entry)) return <AppIcon path={entry.path} fallback={entry.name} />;
