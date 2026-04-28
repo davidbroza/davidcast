@@ -199,6 +199,13 @@ pub fn run() {
         .on_window_event(|window, event| {
             if window.label() == "main" {
                 if let tauri::WindowEvent::Focused(false) = event {
+                    // If the user just pressed the hotkey, the blur is a
+                    // side-effect of the press — let toggle_palette decide
+                    // whether to hide. Otherwise (clicked elsewhere etc.),
+                    // auto-hide as normal.
+                    if hotkey::blur_within_hotkey_grace() {
+                        return;
+                    }
                     let _ = window.hide();
                 }
             }

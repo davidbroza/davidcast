@@ -1,5 +1,40 @@
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::OnceLock;
+use std::time::Instant;
 use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_global_shortcut::{Code, Modifiers, Shortcut, ShortcutState};
+
+/// Monotonic ms counter so the auto-hide-on-blur handler can ignore
+/// blurs that fire as a side-effect of the hotkey press itself.
+///
+/// Without this: when the palette has focus and the user presses ⌥Space,
+/// the keypress causes a focus event before our shortcut handler runs.
+/// The blur handler hides the window, then the shortcut handler reads
+/// is_visible() == false and shows it again — net effect, the palette
+/// stays open and the user perceives the toggle as a "filter reset".
+/// With it: blurs within HOTKEY_BLUR_GRACE_MS of a hotkey press are
+/// ignored, so toggle_palette is the sole decider.
+static APP_START: OnceLock<Instant> = OnceLock::new();
+static LAST_HOTKEY_MS: AtomicU64 = AtomicU64::new(0);
+const HOTKEY_BLUR_GRACE_MS: u64 = 250;
+
+fn now_ms() -> u64 {
+    APP_START
+        .get_or_init(Instant::now)
+        .elapsed()
+        .as_millis() as u64
+}
+
+/// Returns true if the most recent hotkey press is recent enough that
+/// the auto-hide-on-blur handler should *not* hide the window — the
+/// toggle/show logic will handle it.
+pub fn blur_within_hotkey_grace() -> bool {
+    let last = LAST_HOTKEY_MS.load(Ordering::SeqCst);
+    if last == 0 {
+        return false;
+    }
+    now_ms().saturating_sub(last) < HOTKEY_BLUR_GRACE_MS
+}
 
 pub fn default_shortcut() -> Shortcut {
     // ⌥ Space — historical Raycast default, easier on the left hand than ⌃ Space.
@@ -14,6 +49,9 @@ pub fn on_palette_shortcut(app: &AppHandle, _shortcut: &Shortcut, state: Shortcu
     if state != ShortcutState::Pressed {
         return;
     }
+    // Stamp before toggling so the blur handler can recognize the
+    // hotkey-induced blur and bow out.
+    LAST_HOTKEY_MS.store(now_ms(), Ordering::SeqCst);
     toggle_palette(app);
 }
 
@@ -21,6 +59,7 @@ pub fn on_clipboard_shortcut(app: &AppHandle, _shortcut: &Shortcut, state: Short
     if state != ShortcutState::Pressed {
         return;
     }
+    LAST_HOTKEY_MS.store(now_ms(), Ordering::SeqCst);
     open_clipboard(app);
 }
 
