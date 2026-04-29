@@ -20,6 +20,7 @@ export interface Settings {
   screenshot_dirs: string[];
   check_updates_on_launch: boolean;
   bg_image_override: string | null;
+  github_repos: string[];
 }
 
 export const api = {
@@ -39,6 +40,20 @@ export const api = {
     invoke<void>("set_check_updates_on_launch", { value }),
   setBgImageOverride: (value: string | null) =>
     invoke<void>("set_bg_image_override", { value }),
+  setGithubRepos: (value: string[]) =>
+    invoke<void>("set_github_repos", { value }),
+
+  // GitHub plugin — shells out to `gh`. Errors propagate as the rejected
+  // promise's message; the palette surfaces them via the standard error
+  // banner if `gh` isn't installed / authed.
+  githubListPrs: () =>
+    invoke<import("./types").GitHubPr[]>("github_list_prs"),
+  githubListIssues: (query: string | null) =>
+    invoke<import("./types").GitHubIssue[]>("github_list_issues", { query }),
+  githubListAssigned: () =>
+    invoke<import("./types").GitHubIssue[]>("github_list_assigned"),
+
+  openUrl: (url: string) => invoke<void>("open_url", { url }),
 
   // Backup (git) — local commands all touch the system `git` CLI; auth
   // is whatever lets you `git push` from terminal. No credential storage.

@@ -352,6 +352,11 @@ html[data-theme="lcars"] .kind-badge {
   font-family: var(--font-family-mono);
   font-size: 18px;
 }
+.row-icon.glyph.github {
+  background: linear-gradient(135deg, #2c2c34, #1c1c24);
+  color: #7bd88f;
+  font-size: 18px;
+}
 
 /* ---- Screenshot preview pane (Find Screenshots mode) ---- */
 

@@ -66,6 +66,7 @@ pub struct Settings {
     pub screenshot_dirs: Vec<String>,
     pub check_updates_on_launch: bool,
     pub bg_image_override: Option<String>,
+    pub github_repos: Vec<String>,
 }
 
 #[tauri::command]
@@ -79,6 +80,7 @@ pub fn get_settings(store: StoreState<'_>) -> Settings {
         screenshot_dirs: s.config.screenshot_dirs.clone(),
         check_updates_on_launch: s.config.check_updates_on_launch,
         bg_image_override: s.config.bg_image_override.clone(),
+        github_repos: s.config.github_repos.clone(),
     }
 }
 
@@ -87,6 +89,48 @@ pub fn set_check_updates_on_launch(value: bool, store: StoreState<'_>) -> Result
     let mut s = store.write();
     s.config.check_updates_on_launch = value;
     s.save_config().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn set_github_repos(value: Vec<String>, store: StoreState<'_>) -> Result<(), String> {
+    let cleaned: Vec<String> = value
+        .into_iter()
+        .map(|r| r.trim().trim_matches('/').to_string())
+        .filter(|r| !r.is_empty() && r.contains('/'))
+        .collect();
+    let mut s = store.write();
+    s.config.github_repos = cleaned;
+    s.save_config().map_err(|e| e.to_string())
+}
+
+// ---------- GitHub plugin ----------
+
+#[tauri::command]
+pub fn github_list_prs(store: StoreState<'_>) -> Result<Vec<crate::github::PullRequest>, String> {
+    let repos = store.read().config.github_repos.clone();
+    crate::github::list_open_prs(&repos)
+}
+
+#[tauri::command]
+pub fn github_list_issues(
+    query: Option<String>,
+    store: StoreState<'_>,
+) -> Result<Vec<crate::github::Issue>, String> {
+    let repos = store.read().config.github_repos.clone();
+    let q = query.unwrap_or_default();
+    crate::github::search_issues(&q, &repos)
+}
+
+#[tauri::command]
+pub fn github_list_assigned() -> Result<Vec<crate::github::Issue>, String> {
+    crate::github::list_issues_assigned_to_me()
+}
+
+/// Generic "open this URL in the default browser" command. Used by the
+/// GitHub plugin (and anything else that just needs `open <url>`).
+#[tauri::command]
+pub fn open_url(url: String) -> Result<(), String> {
+    crate::vite_ports::open_url(&url)
 }
 
 #[tauri::command]
@@ -840,6 +884,21 @@ fn builtin_commands() -> Vec<CommandEntry> {
             id: "screenshots.copy_latest_path".into(),
             name: "Copy Latest Screenshot Path".into(),
             subtitle: "Newest file across your screenshot dirs — straight to the clipboard".into(),
+        },
+        CommandEntry {
+            id: "github.prs".into(),
+            name: "Show GitHub PRs".into(),
+            subtitle: "Open pull requests across your tracked repos".into(),
+        },
+        CommandEntry {
+            id: "github.issues".into(),
+            name: "Search GitHub Issues".into(),
+            subtitle: "Open issues across your tracked repos — type to filter".into(),
+        },
+        CommandEntry {
+            id: "github.assigned".into(),
+            name: "GitHub Issues Assigned to Me".into(),
+            subtitle: "Anything @me is on, across all of GitHub".into(),
         },
     ]
 }

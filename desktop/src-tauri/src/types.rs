@@ -88,6 +88,11 @@ pub struct Config {
     /// theme's value). Free-form CSS — gradient strings or `url("…")`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub bg_image_override: Option<String>,
+    /// Repositories the GitHub plugin tracks for PR / issue listings.
+    /// Format: "owner/repo". Empty by default — the user adds repos in
+    /// Preferences. Auth piggybacks on `gh auth login`.
+    #[serde(default)]
+    pub github_repos: Vec<String>,
     /// Whether to ping the GitHub Releases updater endpoint at startup.
     /// Manual "Check for Updates" still works either way.
     #[serde(default = "default_true")]
@@ -185,6 +190,7 @@ impl Default for Config {
             screenshot_dirs: default_screenshot_dirs(),
             theme: default_theme_id(),
             bg_image_override: None,
+            github_repos: Vec::new(),
             check_updates_on_launch: true,
             backup: BackupConfig::default(),
         }

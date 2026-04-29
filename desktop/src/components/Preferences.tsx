@@ -291,6 +291,9 @@ export function Preferences({ onClose, onError }: Props) {
           <h2>Background</h2>
           <BackgroundSection onError={onError} />
 
+          <h2>GitHub</h2>
+          <GitHubSection onError={onError} />
+
           <h2>Workspaces</h2>
           <section>
             {workspaces.map((w) => (
@@ -474,6 +477,80 @@ function BackgroundSection({ onError }: { onError: (s: string) => void }) {
           placeholder="linear-gradient(135deg, #1a1a2e, #16213e)"
           style={{ flex: 1, fontFamily: "var(--font-family-mono)", fontSize: 12 }}
         />
+      </div>
+    </section>
+  );
+}
+
+function GitHubSection({ onError }: { onError: (s: string) => void }) {
+  const [repos, setRepos] = useState<string[]>([]);
+  const [newRepo, setNewRepo] = useState("");
+
+  useEffect(() => {
+    api
+      .getSettings()
+      .then((s) => setRepos(s.github_repos))
+      .catch((e) => onError(String(e)));
+  }, [onError]);
+
+  async function commit(next: string[]) {
+    try {
+      await api.setGithubRepos(next);
+      setRepos(next);
+    } catch (e) {
+      onError(String(e));
+    }
+  }
+
+  function add() {
+    const v = newRepo.trim().replace(/^https?:\/\/github\.com\//, "").replace(/\/$/, "");
+    if (!v || !v.includes("/") || repos.includes(v)) {
+      setNewRepo("");
+      return;
+    }
+    commit([...repos, v]);
+    setNewRepo("");
+  }
+
+  function remove(repo: string) {
+    commit(repos.filter((r) => r !== repo));
+  }
+
+  return (
+    <section>
+      <p className="prefs-help">
+        Repositories the GitHub plugin tracks. Format: <code>owner/repo</code>{" "}
+        (or paste a github.com URL — we trim it). Auth piggybacks on{" "}
+        <code>gh auth login</code>; nothing is stored here. Commands:{" "}
+        <kbd>Show GitHub PRs</kbd>, <kbd>Search GitHub Issues</kbd>,{" "}
+        <kbd>GitHub Issues Assigned to Me</kbd>.
+      </p>
+      {repos.length === 0 ? (
+        <div className="prefs-meta" style={{ marginTop: 0, textAlign: "left" }}>
+          No repos tracked yet. Add one below.
+        </div>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          {repos.map((r) => (
+            <div key={r} className="prefs-ws">
+              <code style={{ flex: 1 }}>{r}</code>
+              <button className="btn danger" onClick={() => remove(r)}>
+                Remove
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+      <div className="prefs-add">
+        <input
+          value={newRepo}
+          onChange={(e) => setNewRepo(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && add()}
+          placeholder="owner/repo"
+        />
+        <button className="btn primary" onClick={add}>
+          Add
+        </button>
       </div>
     </section>
   );

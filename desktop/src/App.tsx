@@ -135,6 +135,7 @@ export default function App() {
     screenshot_dirs: [],
     check_updates_on_launch: true,
     bg_image_override: null,
+    github_repos: [],
   });
   const [update, setUpdate] = useState<Update | null>(null);
   const [view, setView] = useState<View>({ kind: "palette" });

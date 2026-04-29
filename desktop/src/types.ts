@@ -137,6 +137,28 @@ export interface CalcEntry {
   result: string;
 }
 
+export interface GitHubPr {
+  repo: string;
+  number: number;
+  title: string;
+  author: string;
+  url: string;
+  created_at: string;
+  labels: string[];
+  is_draft: boolean;
+}
+
+export interface GitHubIssue {
+  repo: string;
+  number: number;
+  title: string;
+  author: string;
+  url: string;
+  created_at: string;
+  labels: string[];
+  assignees: string[];
+}
+
 export type PaletteEntry =
   | ({ kind: "command" } & CommandEntry)
   | ({ kind: "snippet" } & Snippet)
@@ -149,7 +171,9 @@ export type PaletteEntry =
   | ({ kind: "theme" } & Theme)
   | ({ kind: "clipboard" } & ClipboardEntry)
   | ({ kind: "skill" } & SkillEntry)
-  | ({ kind: "calc" } & CalcEntry);
+  | ({ kind: "calc" } & CalcEntry)
+  | ({ kind: "github_pr" } & GitHubPr)
+  | ({ kind: "github_issue" } & GitHubIssue);
 
 export function isSnippet(i: Item | PaletteEntry): i is { kind: "snippet" } & Snippet {
   return i.kind === "snippet";
@@ -203,6 +227,14 @@ export function isCalc(i: PaletteEntry): i is { kind: "calc" } & CalcEntry {
   return i.kind === "calc";
 }
 
+export function isGitHubPr(i: PaletteEntry): i is { kind: "github_pr" } & GitHubPr {
+  return i.kind === "github_pr";
+}
+
+export function isGitHubIssue(i: PaletteEntry): i is { kind: "github_issue" } & GitHubIssue {
+  return i.kind === "github_issue";
+}
+
 export function asItem(e: PaletteEntry): Item | null {
   if (e.kind === "snippet") return { ...e };
   if (e.kind === "quicklink") return { ...e };
@@ -241,6 +273,10 @@ export function stableEntryKey(e: PaletteEntry): string {
       return `sk:${e.path}`;
     case "calc":
       return `calc:${e.expr}`;
+    case "github_pr":
+      return `ghpr:${e.repo}:${e.number}`;
+    case "github_issue":
+      return `ghi:${e.repo}:${e.number}`;
   }
 }
 

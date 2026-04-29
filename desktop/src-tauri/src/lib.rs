@@ -8,6 +8,7 @@ mod commands;
 mod docker_ps;
 mod files;
 mod git;
+mod github;
 mod hotkey;
 mod icons;
 #[cfg(target_os = "macos")]
@@ -225,6 +226,11 @@ pub fn run() {
             commands::set_screenshot_dirs,
             commands::set_check_updates_on_launch,
             commands::set_bg_image_override,
+            commands::set_github_repos,
+            commands::github_list_prs,
+            commands::github_list_issues,
+            commands::github_list_assigned,
+            commands::open_url,
             commands::get_backup_settings,
             commands::set_backup_remote,
             commands::set_backup_branch,

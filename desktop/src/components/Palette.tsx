@@ -22,6 +22,8 @@ import {
   isCommand,
   isDocker,
   isFile,
+  isGitHubIssue,
+  isGitHubPr,
   isQuicklink,
   isSkill,
   isSnippet,
@@ -195,6 +197,10 @@ export function Palette({
   const [screenshotMode, setScreenshotMode] = useState(false);
   const [themeEntries, setThemeEntries] = useState<PaletteEntry[]>([]);
   const [skillEntries, setSkillEntries] = useState<PaletteEntry[]>([]);
+  const [githubEntries, setGithubEntries] = useState<PaletteEntry[]>([]);
+  // Which GitHub mode the user opened ("pr" | "issue" | "assigned" | null).
+  // Drives placeholder text + which fetch to run on query changes.
+  const [githubMode, setGithubMode] = useState<"pr" | "issue" | "assigned" | null>(null);
   // Perf measurement: stamp time on input event, measure to next paint
   // via double-rAF. Pill auto-fades. Helps verify first-keystroke is fast.
   const inputStampRef = useRef<number | null>(null);
@@ -282,6 +288,42 @@ export function Palette({
     if (kindFilter !== "file") setScreenshotMode(false);
   }, [kindFilter]);
 
+  // Leaving any GitHub mode resets the bookkeeping + entry list so a
+  // stale fetch doesn't bleed into the next mode.
+  useEffect(() => {
+    if (kindFilter !== "github_pr" && kindFilter !== "github_issue") {
+      setGithubMode(null);
+      setGithubEntries([]);
+    }
+  }, [kindFilter]);
+
+  // In "issue" mode (search across tracked repos), refetch when the user
+  // types — gh's `--search` is server-side, so we can't fuzzy-match
+  // client-side. 350ms debounce. "pr" and "assigned" stick to one fetch
+  // and use the local fuse index for filtering.
+  useEffect(() => {
+    if (githubMode !== "issue") return;
+    const q = deferredQuery.trim();
+    let cancelled = false;
+    const t = window.setTimeout(() => {
+      api
+        .githubListIssues(q || null)
+        .then((rows) => {
+          if (cancelled) return;
+          setGithubEntries(
+            rows.map((r) => ({ kind: "github_issue" as const, ...r })),
+          );
+        })
+        .catch((e) => {
+          if (!cancelled) onError(String(e));
+        });
+    }, 350);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(t);
+    };
+  }, [deferredQuery, githubMode, onError]);
+
   // Theme picker — list_themes is fast (mostly built-ins), fetched once
   // each time the filter is set.
   useEffect(() => {
@@ -354,6 +396,9 @@ export function Palette({
     if (kindFilter === "file") return fileEntries;
     if (kindFilter === "theme") return themeEntries;
     if (kindFilter === "skill") return skillEntries;
+    if (kindFilter === "github_pr" || kindFilter === "github_issue") {
+      return githubEntries;
+    }
     if (kindFilter) return entries.filter((e) => e.kind === kindFilter);
     // Unfiltered view: respect inline-display settings. Vite/Docker entries
     // are still reachable via "Show Vite Ports" / "Show Docker Containers"
@@ -365,7 +410,7 @@ export function Palette({
       if (e.kind === "quicklink" && !settings.show_quicklinks_inline) return false;
       return true;
     });
-  }, [entries, clipboardEntries, fileEntries, themeEntries, skillEntries, kindFilter, settings]);
+  }, [entries, clipboardEntries, fileEntries, themeEntries, skillEntries, githubEntries, kindFilter, settings]);
 
   // Lazy Fuse: building the index over hundreds of entries with 11 keys is
   // ~30–100ms and was happening synchronously inside useMemo on every
@@ -741,6 +786,48 @@ export function Palette({
             setQuery("");
             setKindFilter("skill");
             break;
+          case "github.prs":
+            setQuery("");
+            setGithubMode("pr");
+            setKindFilter("github_pr");
+            setGithubEntries([]);
+            api
+              .githubListPrs()
+              .then((rows) =>
+                setGithubEntries(
+                  rows.map((r) => ({ kind: "github_pr" as const, ...r })),
+                ),
+              )
+              .catch((e) => onError(String(e)));
+            break;
+          case "github.issues":
+            setQuery("");
+            setGithubMode("issue");
+            setKindFilter("github_issue");
+            setGithubEntries([]);
+            api
+              .githubListIssues(null)
+              .then((rows) =>
+                setGithubEntries(
+                  rows.map((r) => ({ kind: "github_issue" as const, ...r })),
+                ),
+              )
+              .catch((e) => onError(String(e)));
+            break;
+          case "github.assigned":
+            setQuery("");
+            setGithubMode("assigned");
+            setKindFilter("github_issue");
+            setGithubEntries([]);
+            api
+              .githubListAssigned()
+              .then((rows) =>
+                setGithubEntries(
+                  rows.map((r) => ({ kind: "github_issue" as const, ...r })),
+                ),
+              )
+              .catch((e) => onError(String(e)));
+            break;
           case "screenshots.copy_latest_path": {
             // One-shot: find the newest screenshot, copy its path to the
             // clipboard, toast, keep the palette open. The palette stays
@@ -846,6 +933,10 @@ export function Palette({
         await api.copyFilePath(entry.path);
         setToast("Path copied");
         window.setTimeout(() => setToast(null), 700);
+      } else if (isGitHubPr(entry) || isGitHubIssue(entry)) {
+        // Open the PR/issue URL in the default browser. Tauri's
+        // `open_url` shell-out matches what Quicklinks do.
+        await api.openUrl(entry.url);
       } else if (isCalc(entry)) {
         // ↵ on a calc row copies the result and keeps the palette open
         // so the user can iterate (refine the expression, copy again).
@@ -1261,6 +1352,8 @@ function entryKey(e: PaletteEntry): string {
   if (isTheme(e)) return `theme:${e.id}`;
   if (isClipboard(e)) return `clip:${e.id}`;
   if (isSkill(e)) return `skill:${e.path}`;
+  if (isGitHubPr(e)) return `ghpr:${e.repo}:${e.number}`;
+  if (isGitHubIssue(e)) return `ghi:${e.repo}:${e.number}`;
   return `${e.kind}:${e.id}`;
 }
 
@@ -1293,6 +1386,10 @@ function kindPriority(e: PaletteEntry): number {
       return 10;
     case "calc":
       return -1;
+    case "github_pr":
+      return 4;
+    case "github_issue":
+      return 5;
   }
 }
 
@@ -1304,6 +1401,7 @@ function nameOf(e: PaletteEntry): string {
   if (e.kind === "theme") return e.name;
   if (e.kind === "skill") return e.name;
   if (e.kind === "clipboard") return e.text;
+  if (e.kind === "github_pr" || e.kind === "github_issue") return e.title;
   return (e as { name?: string }).name ?? "";
 }
 
@@ -1348,6 +1446,10 @@ function filterLabel(k: PaletteEntry["kind"]): string {
       return "Skills";
     case "calc":
       return "Calculator";
+    case "github_pr":
+      return "GitHub PRs";
+    case "github_issue":
+      return "GitHub Issues";
   }
 }
 
@@ -1375,6 +1477,10 @@ function placeholderFor(k: KindFilter): string {
       return "Pick a theme — ↵ applies it, drop JSONs in ~/.../davidcast/themes";
     case "skill":
       return "Search Claude Code skills — ↵ copies path, ⌘↵ opens, ⌘⇧C copies contents";
+    case "github_pr":
+      return "Open PRs across your tracked repos — ↵ opens in browser";
+    case "github_issue":
+      return "Search GitHub issues — type to filter, ↵ opens";
     default:
       return "Type to search — snippets, quicklinks, apps, agents, commands…";
   }
@@ -1461,6 +1567,17 @@ const Row = memo(function Row({
     name = `= ${entry.result}`;
     sub = `${entry.expr} — ↵ to copy`;
     badge = "Calc";
+  } else if (isGitHubPr(entry)) {
+    name = entry.title;
+    const author = entry.author ? ` · @${entry.author}` : "";
+    const draft = entry.is_draft ? " · draft" : "";
+    sub = `${entry.repo}#${entry.number}${author}${draft}`;
+    badge = entry.is_draft ? "PR · draft" : "PR";
+  } else if (isGitHubIssue(entry)) {
+    name = entry.title;
+    const author = entry.author ? ` · @${entry.author}` : "";
+    sub = `${entry.repo}#${entry.number}${author}`;
+    badge = "Issue";
   }
 
   const keyword =
@@ -1567,6 +1684,13 @@ function EntryIcon({ entry }: { entry: PaletteEntry }) {
     return (
       <div className="row-icon glyph calc" aria-hidden>
         =
+      </div>
+    );
+  }
+  if (isGitHubPr(entry) || isGitHubIssue(entry)) {
+    return (
+      <div className="row-icon glyph github" aria-hidden>
+        ●
       </div>
     );
   }
