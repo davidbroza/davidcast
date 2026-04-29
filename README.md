@@ -349,25 +349,36 @@ Working tree = the data dir; the `.git` is tucked away at `~/Library/Application
 
 ### Themes
 
-20+ themes ship built in. Pick `themes.switch` in the palette and arrow through them — every row **live-previews on hover**, so you can scrub the look without committing.
+25+ themes ship built in. Pick `themes.switch` in the palette and arrow through them — every row **live-previews on hover**, so you can scrub the look without committing.
 
 <p align="center">
-  <img src="docs/assets/themes/themes-grid.png" alt="Eight davidcast themes — Default Dark, Pixel 8-bit, Solarized Dark, Synthwave '84, Gameboy DMG, Matrix, Hot Dog Stand, Comic Sans" width="900" />
+  <img src="docs/assets/themes/themes-grid.png" alt="Fifteen davidcast themes — Default, Solarized, Synthwave, Matrix, Pixel 8-bit, Gameboy, Pokémon, DOOM, LCARS, Star Wars, Stargate, Red Dwarf, GTA V, Hot Dog Stand, Comic Sans" width="900" />
 </p>
 
 | Theme | Vibe |
 |---|---|
 | **Default Dark** | Soft slate background, blue accents, system-font sans-serif. The quiet one most people stop on. |
-| **Pixel — 8-bit** | Press Start 2P everywhere, chunky pixel rows, warm CRT yellow. Reads like a NES menu — keyboard hints render in 8-bit too. |
 | **Solarized Dark / Light** | Ethan Schoonover's classic palette, exact base16 hex values. The one your terminal already runs. |
-| **Synthwave '84** | Magenta-on-purple with neon glow on the focused row. Pairs well with `dark sun` wallpaper and zero deadlines. |
+| **Synthwave '84** | Magenta-on-purple with neon glow on the focused row. Dark sun wallpaper and zero deadlines. |
+| **Matrix** | Pure black, three shades of `#00FF41`, monospace stack. Screensaver-as-launcher. |
+| **Pixel — 8-bit** | Press Start 2P everywhere, chunky pixel rows, warm CRT yellow. Keyboard hints render in 8-bit too. |
 | **Gameboy DMG** | Pea-green LCD, four shades, "Early GameBoy" bitmap font. Type `iter` and squint. |
-| **Matrix** | Pure black, three shades of `#00FF41`, monospace stack. Looks like the screensaver, works like a launcher. |
-| **Hot Dog Stand** | Windows 3.1's worst color scheme, faithfully ported. Yellow background, red title bar. Use to repel coworkers. |
+| **Pokémon (R/B)** | Pokeball red, pikachu yellow, bitmap-font dialog box, soft cream backdrop. Press Start. |
+| **DOOM** | Blood red on near-black, status-bar orange accents, diagonal scratch overlay. Rip and tear. |
+| **LCARS (Star Trek)** | TNG bridge UI — chunky orange `1701-D` endcap on the topbar, holographic peach/lilac glow, all-caps labels. |
+| **Star Wars (Crawl)** | Lucasfilm yellow `#FFE81F` on the deepest space black. Lightsaber-blue / sith-red / yoda-green badges. |
+| **Stargate** | Event-horizon blue + Egyptian bronze on deep navy. Conic shimmer mimics the gate-pool. |
+| **Red Dwarf** | JMC mining-ship hull red, off-white block letters, smegheads-yellow accents and Holly's cyan on badges. |
+| **GTA V (Los Santos)** | Vinewood-yellow on a sun-bleached navy → peach sunset gradient. Impact-stack font for the HUD vibe. |
+| **Hot Dog Stand** | Windows 3.1's worst color scheme, faithfully ported. Yellow on red on black. |
 | **Comic Sans (please don't)** | Comic Sans MS at every size. The theme registry has no taste, and that is fine. |
 | _and more…_ | Dracula, Nord, Tokyo Night, Gruvbox, Cyberpunk, Brutalist, Bubblegum, Newsprint, Vaporwave, Hacker (Green on Black), Retro Amber CRT, Nerd (JetBrains Mono), High Contrast, Light. |
 
-Themes are full visual identities — colour tokens, font family, corner radius, badge pills and keyboard-hint typography all wired through CSS custom properties on the document root.
+Themes are full visual identities — colour tokens, font family, background gradient, badge pills and keyboard-hint typography all wired through CSS custom properties on the document root. A few themes (LCARS, Pokémon) ship bespoke chrome on top of the tokens; theme-scoped CSS targets `html[data-theme="<id>"]` so the rest of the registry stays untouched.
+
+#### Background overlay
+
+Preferences → Background lets you layer a CSS gradient or pattern on top of any theme's solid bg. Six curated presets (theme default, holographic scanlines, starfield, cyberpunk grid, plasma glow, nebula) plus a freeform Custom CSS field for `linear-gradient(...)` / `url(...)` / stacked layers. The override survives theme switches.
 
 #### Custom themes
 
