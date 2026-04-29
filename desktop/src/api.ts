@@ -21,7 +21,34 @@ export interface Settings {
   check_updates_on_launch: boolean;
   bg_image_override: string | null;
   github_repos: string[];
+  enable_recommendations: boolean;
 }
+
+// On-device recommender — see desktop/src-tauri/src/recommend.rs.
+export type RecommendScoreInput = { key: string; kind: string };
+export type RecommendScoreOutput = {
+  key: string;
+  score: number;
+  has_history: boolean;
+};
+export type RecommendTopItem = {
+  key: string;
+  kind: string;
+  score: number;
+  exec_count: number;
+  last_used_ms: number;
+};
+export type RecommendStatus = {
+  trained: boolean;
+  trained_at_ms: number;
+  last_event_ms: number;
+  train_examples: number;
+  item_count: number;
+  weights: number[];
+  feature_names: string[];
+  confidence_threshold: number;
+  top_items: RecommendTopItem[];
+};
 
 export const api = {
   // Settings
@@ -42,6 +69,17 @@ export const api = {
     invoke<void>("set_bg_image_override", { value }),
   setGithubRepos: (value: string[]) =>
     invoke<void>("set_github_repos", { value }),
+  setEnableRecommendations: (value: boolean) =>
+    invoke<void>("set_enable_recommendations", { value }),
+
+  // Recommender — local logistic regression trained from analytics.jsonl.
+  // Inference is fast and synchronous; the model file lives at
+  // ~/Library/Application Support/davidcast/recommender_state.json.
+  recommendTrain: () => invoke<RecommendStatus>("recommend_train"),
+  recommendStatus: () => invoke<RecommendStatus>("recommend_status"),
+  recommendScore: (inputs: RecommendScoreInput[]) =>
+    invoke<RecommendScoreOutput[]>("recommend_score", { inputs }),
+  recommendClear: () => invoke<void>("recommend_clear"),
 
   // GitHub plugin — shells out to `gh`. Errors propagate as the rejected
   // promise's message; the palette surfaces them via the standard error

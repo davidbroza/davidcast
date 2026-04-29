@@ -101,6 +101,12 @@ pub struct Config {
     /// the user wires up a remote in Preferences.
     #[serde(default)]
     pub backup: BackupConfig,
+    /// On-device recommender that learns from `analytics.jsonl` and
+    /// re-ranks the empty-query palette + surfaces a "Recommended for
+    /// you" section. Off by default — the model only matters once the
+    /// user has built up some usage history.
+    #[serde(default)]
+    pub enable_recommendations: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -193,6 +199,7 @@ impl Default for Config {
             github_repos: Vec::new(),
             check_updates_on_launch: true,
             backup: BackupConfig::default(),
+            enable_recommendations: false,
         }
     }
 }

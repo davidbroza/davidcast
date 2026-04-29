@@ -196,6 +196,7 @@ mod tests {
             github_repos: vec![],
             check_updates_on_launch: false,
             backup: crate::types::BackupConfig::default(),
+            enable_recommendations: false,
         };
         Store::ensure_workspace_dir(&root, "ws1").unwrap();
         let store = Store { root, config };

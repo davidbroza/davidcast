@@ -225,6 +225,10 @@ const GROUPS: Group[] = [
         description: "Push the entire store to a git remote you control — Preferences → Backup. Auto-syncs every 10 min when there are changes; manual Sync now / Pull / Force push buttons too. analytics.jsonl is excluded by default for privacy.",
       },
       {
+        name: "Smart palette ranking",
+        description: "Optional on-device recommender that learns from your usage history (frequency, recency, time-of-day, day-of-week). Re-ranks the empty palette and surfaces a 'Recommended for you' section when confident. Off by default — toggle in Preferences. Trains and runs locally; the model file lives next to your data, never leaves the box.",
+      },
+      {
         name: "Import from Raycast",
         description: "Preferences → Import. Auto-detects Raycast snippet/quicklink JSON exports.",
       },

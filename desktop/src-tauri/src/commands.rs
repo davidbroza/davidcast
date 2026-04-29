@@ -67,6 +67,7 @@ pub struct Settings {
     pub check_updates_on_launch: bool,
     pub bg_image_override: Option<String>,
     pub github_repos: Vec<String>,
+    pub enable_recommendations: bool,
 }
 
 #[tauri::command]
@@ -81,6 +82,7 @@ pub fn get_settings(store: StoreState<'_>) -> Settings {
         check_updates_on_launch: s.config.check_updates_on_launch,
         bg_image_override: s.config.bg_image_override.clone(),
         github_repos: s.config.github_repos.clone(),
+        enable_recommendations: s.config.enable_recommendations,
     }
 }
 
@@ -89,6 +91,66 @@ pub fn set_check_updates_on_launch(value: bool, store: StoreState<'_>) -> Result
     let mut s = store.write();
     s.config.check_updates_on_launch = value;
     s.save_config().map_err(|e| e.to_string())
+}
+
+// ---------- Recommendations ----------
+//
+// The recommender runs entirely off the analytics.jsonl log. These
+// commands wire the model's lifecycle into the frontend: a toggle in
+// Preferences, manual retrain, and inference for the palette's
+// empty-query view. State (weights + per-item stats) lives in
+// `recommender_state.json` next to the analytics log.
+
+#[tauri::command]
+pub fn set_enable_recommendations(
+    value: bool,
+    store: StoreState<'_>,
+) -> Result<(), String> {
+    let mut s = store.write();
+    s.config.enable_recommendations = value;
+    s.save_config().map_err(|e| e.to_string())?;
+    drop(s);
+    // Train immediately on enable so the user sees something useful
+    // right after flipping the toggle. Cheap — under a second for tens
+    // of thousands of events.
+    if value {
+        if let Ok(state) = crate::recommend::train_from_log() {
+            let _ = crate::recommend::save_state(&state);
+        }
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub fn recommend_train() -> Result<crate::recommend::RecommenderStatus, String> {
+    let state = crate::recommend::train_from_log()?;
+    crate::recommend::save_state(&state)?;
+    Ok(crate::recommend::status(&state))
+}
+
+#[tauri::command]
+pub fn recommend_status() -> crate::recommend::RecommenderStatus {
+    let state = crate::recommend::load_state();
+    crate::recommend::status(&state)
+}
+
+#[tauri::command]
+pub fn recommend_score(
+    inputs: Vec<crate::recommend::ScoreInput>,
+) -> Vec<crate::recommend::ScoreOutput> {
+    let state = crate::recommend::load_state();
+    crate::recommend::score_items(&state, &inputs)
+}
+
+#[tauri::command]
+pub fn recommend_clear() -> Result<(), String> {
+    let path = crate::store::Store::root_dir()
+        .map(|p| p.join("recommender_state.json"))
+        .map_err(|e| e.to_string())?;
+    if path.exists() {
+        std::fs::remove_file(&path).map_err(|e| e.to_string())?;
+    }
+    Ok(())
 }
 
 #[tauri::command]

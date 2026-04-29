@@ -136,6 +136,7 @@ export default function App() {
     check_updates_on_launch: true,
     bg_image_override: null,
     github_repos: [],
+    enable_recommendations: false,
   });
   const [update, setUpdate] = useState<Update | null>(null);
   const [view, setView] = useState<View>({ kind: "palette" });

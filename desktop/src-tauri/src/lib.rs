@@ -13,6 +13,7 @@ mod hotkey;
 mod icons;
 #[cfg(target_os = "macos")]
 mod macos_perf;
+mod recommend;
 mod skills;
 mod stats;
 mod store;
@@ -163,6 +164,57 @@ pub fn run() {
                 }
             });
 
+            // Background recommender retrain.
+            //
+            // Wakes every 5 minutes. When the user has the recommender
+            // enabled and there are at least RETRAIN_MIN_NEW_EVENTS new
+            // execute events since the last training pass, we replay
+            // the entire analytics.jsonl. Training is fast (well under
+            // a second for tens of thousands of events) and runs off
+            // the UI thread, so the user never sees a hitch.
+            //
+            // We deliberately retrain from scratch instead of doing
+            // online updates: replaying the log is cheap, and a full
+            // pass guarantees that aged-out events (deleted from the
+            // log via "Clear Analytics") stop influencing the model.
+            let recommend_handle = app.handle().clone();
+            std::thread::spawn(move || {
+                use std::time::Duration;
+                const RETRAIN_TICK_SECS: u64 = 5 * 60;
+                const RETRAIN_MIN_NEW_EVENTS: usize = 30;
+                loop {
+                    std::thread::sleep(Duration::from_secs(RETRAIN_TICK_SECS));
+                    let store = match recommend_handle
+                        .try_state::<RwLock<store::Store>>()
+                    {
+                        Some(s) => s,
+                        None => continue,
+                    };
+                    let enabled = store.read().config.enable_recommendations;
+                    if !enabled {
+                        continue;
+                    }
+                    let prev = recommend::load_state();
+                    let Some(log_path) = analytics::log_path() else {
+                        continue;
+                    };
+                    let Ok(content) = std::fs::read_to_string(&log_path) else {
+                        continue;
+                    };
+                    // Cheap line count is good enough — execute events
+                    // are a strict subset, so this is an upper bound on
+                    // "events the model hasn't seen."
+                    let lines = content.lines().count();
+                    let already = prev.train_examples;
+                    if lines < already + RETRAIN_MIN_NEW_EVENTS {
+                        continue;
+                    }
+                    if let Ok(next) = recommend::train_from_jsonl(&content) {
+                        let _ = recommend::save_state(&next);
+                    }
+                }
+            });
+
             // Build the menu-bar tray.
             let show_i = MenuItem::with_id(app, "show", "Open davidcast", true, Some("Ctrl+Space"))?;
             let prefs_i = MenuItem::with_id(app, "prefs", "Preferences…", true, Some("Cmd+,"))?;
@@ -248,6 +300,11 @@ pub fn run() {
             commands::analytics_summary,
             commands::analytics_clear,
             commands::analytics_log_path,
+            commands::set_enable_recommendations,
+            commands::recommend_train,
+            commands::recommend_status,
+            commands::recommend_score,
+            commands::recommend_clear,
             commands::search_files,
             commands::open_file,
             commands::reveal_file,

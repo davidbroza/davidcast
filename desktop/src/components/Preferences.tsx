@@ -69,7 +69,8 @@ export function Preferences({ onClose, onError }: Props) {
       | "show_docker_inline"
       | "show_snippets_inline"
       | "show_quicklinks_inline"
-      | "check_updates_on_launch",
+      | "check_updates_on_launch"
+      | "enable_recommendations",
     setter: (v: boolean) => Promise<void>,
   ) {
     if (!settings) return;
@@ -288,6 +289,38 @@ export function Preferences({ onClose, onError }: Props) {
             </div>
           </section>
 
+          <h2>Recommendations</h2>
+          <section>
+            <div className="prefs-row">
+              <div className="label">
+                <div className="label-title">Smart palette ranking</div>
+                <div className="label-sub">
+                  Trains a small on-device model from your usage history
+                  ({" "}
+                  <code>analytics.jsonl</code>
+                  {" "}— never leaves the box) and reorders the empty
+                  palette by what's most likely to be useful right now.
+                  When the top guess is high-confidence, you'll see a{" "}
+                  <b>Recommended for you</b> section above the list.
+                </div>
+              </div>
+              <div
+                className={`switch ${settings?.enable_recommendations ? "on" : ""}`}
+                onClick={() =>
+                  toggleSetting(
+                    "enable_recommendations",
+                    api.setEnableRecommendations,
+                  )
+                }
+                role="switch"
+                aria-checked={!!settings?.enable_recommendations}
+              />
+            </div>
+            {settings?.enable_recommendations && (
+              <RecommenderSection onError={onError} />
+            )}
+          </section>
+
           <h2>Background</h2>
           <BackgroundSection onError={onError} />
 
@@ -374,6 +407,176 @@ const BG_PRESETS: Array<{ id: string; label: string; value: string | null }> = [
       "radial-gradient(ellipse at 30% 20%, rgba(80, 180, 255, 0.20), transparent 50%), radial-gradient(ellipse at 70% 80%, rgba(255, 100, 200, 0.20), transparent 50%), radial-gradient(ellipse at 50% 50%, rgba(60, 30, 100, 0.30), transparent 60%)",
   },
 ];
+
+/// Status panel under the "Smart palette ranking" toggle. Loads the
+/// recommender's current state on mount, exposes Retrain / Reset buttons,
+/// and shows the model's current top-N items + per-feature weights so
+/// the user can see what it's actually learned.
+function RecommenderSection({ onError }: { onError: (s: string) => void }) {
+  const [status, setStatus] = useState<import("../api").RecommendStatus | null>(
+    null,
+  );
+  const [busy, setBusy] = useState<"train" | "clear" | null>(null);
+
+  const refresh = useCallback(async () => {
+    try {
+      const s = await api.recommendStatus();
+      setStatus(s);
+    } catch (e) {
+      onError(String(e));
+    }
+  }, [onError]);
+
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
+
+  async function retrain() {
+    setBusy("train");
+    try {
+      const s = await api.recommendTrain();
+      setStatus(s);
+    } catch (e) {
+      onError(String(e));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function reset() {
+    setBusy("clear");
+    try {
+      await api.recommendClear();
+      await refresh();
+    } catch (e) {
+      onError(String(e));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  const trainedAt =
+    status && status.trained_at_ms > 0
+      ? relativeTime(status.trained_at_ms)
+      : "never";
+
+  const topByFreq = status
+    ? [...status.top_items]
+        .sort((a, b) => b.exec_count - a.exec_count)
+        .slice(0, 5)
+    : [];
+
+  return (
+    <>
+      <div className="prefs-row" style={{ flexDirection: "column", alignItems: "stretch", gap: 8 }}>
+        <div className="label" style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+          <div>
+            <div className="label-title">Model status</div>
+            <div className="label-sub">
+              {status
+                ? status.trained
+                  ? `Trained ${trainedAt} on ${status.train_examples} events across ${status.item_count} items.`
+                  : `Not enough data yet — ${status.train_examples} events recorded so far. Use the palette a bit more, then retrain.`
+                : "Loading…"}
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button
+              className="btn"
+              onClick={retrain}
+              disabled={busy !== null}
+            >
+              {busy === "train" ? "Training…" : "Retrain now"}
+            </button>
+            <button
+              className="btn danger"
+              onClick={reset}
+              disabled={busy !== null}
+              title="Delete the model file. Doesn't touch your analytics log."
+            >
+              {busy === "clear" ? "Clearing…" : "Reset model"}
+            </button>
+          </div>
+        </div>
+      </div>
+      {status && status.trained && status.top_items.length > 0 && (
+        <div className="prefs-row" style={{ flexDirection: "column", alignItems: "stretch", gap: 8 }}>
+          <div className="label">
+            <div className="label-title">What the model thinks you'll want now</div>
+            <div className="label-sub">
+              Top picks at this exact moment of day, ranked by score (a
+              probability between 0 and 1). Confidence threshold for the{" "}
+              <b>Recommended for you</b> section is{" "}
+              <code>{status.confidence_threshold.toFixed(2)}</code>.
+            </div>
+          </div>
+          <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "flex", flexDirection: "column", gap: 4 }}>
+            {status.top_items.map((it) => (
+              <li
+                key={it.key}
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  fontFamily: "var(--font-family-mono)",
+                  fontSize: 12,
+                  color: "var(--fg-muted)",
+                }}
+              >
+                <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {it.key}
+                </span>
+                <span style={{ marginLeft: 12 }}>
+                  {(it.score * 100).toFixed(0)}% · {it.exec_count}×
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {status && status.trained && (
+        <div className="prefs-row" style={{ flexDirection: "column", alignItems: "stretch", gap: 8 }}>
+          <div className="label">
+            <div className="label-title">Learned weights</div>
+            <div className="label-sub">
+              Each weight is what the model multiplies the named feature by.
+              Positive weights help, negative hurt. Frequency, recency and
+              time-of-day are the signals that usually matter most.
+            </div>
+          </div>
+          <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "flex", flexDirection: "column", gap: 4 }}>
+            {status.feature_names.map((name, i) => (
+              <li
+                key={name}
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  fontFamily: "var(--font-family-mono)",
+                  fontSize: 12,
+                  color: "var(--fg-muted)",
+                }}
+              >
+                <span>{name}</span>
+                <span>{status.weights[i].toFixed(3)}</span>
+              </li>
+            ))}
+          </ul>
+          {topByFreq.length > 0 && (
+            <div className="label-sub" style={{ marginTop: 4 }}>
+              Most-executed items so far:{" "}
+              {topByFreq.map((it, i) => (
+                <span key={it.key}>
+                  {i > 0 && " · "}
+                  <code>{it.key}</code>{" "}
+                  <span style={{ opacity: 0.6 }}>({it.exec_count}×)</span>
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </>
+  );
+}
 
 function BackgroundSection({ onError }: { onError: (s: string) => void }) {
   const [override, setOverride] = useState<string | null>(null);

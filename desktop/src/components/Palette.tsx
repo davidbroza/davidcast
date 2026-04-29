@@ -38,6 +38,19 @@ import { r2, scheduleIdle } from "../utils";
 
 type KindFilter = PaletteEntry["kind"] | null;
 
+/// Recommender lookup key. Must match the `${kind}:${name}` shape that
+/// `analytics.rs` records for execute events — that's what
+/// `recommend.rs::train_from_jsonl` uses to build per-item stats.
+function recommenderKey(e: PaletteEntry): string {
+  return `${e.kind}:${shortName(e)}`;
+}
+
+/// Cap on how many rows show up in the dedicated "Recommended for you"
+/// section above the empty-query list. Two reasons to keep this small:
+/// the section should feel curated (not just a top-N dump), and every
+/// extra row pushes the rest of the palette down out of view.
+const MAX_RECOMMENDATIONS = 4;
+
 // Recents — the last few items the user actually picked, persisted to
 // localStorage so they survive across launches. Drives the empty-query
 // suggestion list.
@@ -444,6 +457,60 @@ export function Palette({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visibleEntries]);
 
+  // Recommender scores per visible entry, keyed by `recommenderKey(e)`.
+  // Fetched in a useEffect when the recommender is enabled — synchronous
+  // on the Rust side, but we still keep it off the keystroke path. When
+  // the recommender is disabled, this stays empty and ranking falls back
+  // to the legacy recents-bias ordering.
+  const [scoreMap, setScoreMap] = useState<Map<string, number>>(new Map());
+  const [confidenceThreshold, setConfidenceThreshold] = useState(0.65);
+  const recommenderEnabled = settings.enable_recommendations;
+
+  // Pull the model's confidence threshold once when the recommender is
+  // enabled. Cheap — just reads the state file off disk via Rust.
+  useEffect(() => {
+    if (!recommenderEnabled) {
+      setScoreMap(new Map());
+      return;
+    }
+    let cancelled = false;
+    api
+      .recommendStatus()
+      .then((s) => {
+        if (cancelled) return;
+        setConfidenceThreshold(s.confidence_threshold);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [recommenderEnabled]);
+
+  // Score the visible entries whenever the set changes. Only runs when
+  // the recommender toggle is on; otherwise the score map stays empty
+  // and ranking falls through to the legacy ordering.
+  useEffect(() => {
+    if (!recommenderEnabled) return;
+    if (visibleEntries.length === 0) return;
+    let cancelled = false;
+    const inputs = visibleEntries.map((e) => ({
+      key: recommenderKey(e),
+      kind: e.kind,
+    }));
+    api
+      .recommendScore(inputs)
+      .then((scored) => {
+        if (cancelled) return;
+        const next = new Map<string, number>();
+        for (const s of scored) next.set(s.key, s.score);
+        setScoreMap(next);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [visibleEntries, recommenderEnabled]);
+
   const baseFiltered = useMemo(() => {
     // File mode is fully resolved by the backend (fd does the matching);
     // skip Fuse entirely so we don't filter the results twice.
@@ -452,11 +519,24 @@ export function Palette({
     const recents = loadRecents();
     if (!q) {
       // Empty query order:
-      //   1) recents — what you actually use, newest first
-      //   2) kind priority — apps > your items > plugins > clipboard
-      //   3) alphabetical name — predictable tiebreaker
+      //   1) when the recommender is enabled and has scored items,
+      //      sort by score desc — that's the trained model's best
+      //      guess at what the user wants right now (frequency,
+      //      recency, time-of-day, day-of-week, session bonus).
+      //   2) recents — what you actually use, newest first
+      //   3) kind priority — apps > your items > plugins > clipboard
+      //   4) alphabetical name — predictable tiebreaker
       const ranked = [...visibleEntries];
+      const useScores = recommenderEnabled && scoreMap.size > 0;
       ranked.sort((a, b) => {
+        if (useScores) {
+          const sa = scoreMap.get(recommenderKey(a)) ?? 0;
+          const sb = scoreMap.get(recommenderKey(b)) ?? 0;
+          // Treat tiny score differences as ties so legacy signals act
+          // as a tiebreaker — keeps cold-start palettes (no usage
+          // history) feeling identical to the pre-recommender build.
+          if (Math.abs(sa - sb) > 0.005) return sb - sa;
+        }
         const ra = recents[entryKey(a)] ?? 0;
         const rb = recents[entryKey(b)] ?? 0;
         if (ra !== rb) return rb - ra;
@@ -522,20 +602,57 @@ export function Palette({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [deferredQuery, visibleEntries, kindFilter]);
 
-  // Calculator row — when the query parses as a math expression, surface
-  // the result at the top of the list. Pure frontend, never network.
+  // Top-N recommendations — only surfaces when:
+  //   1) the user has the toggle on,
+  //   2) the query is empty (we don't intrude when they're searching),
+  //   3) no kind filter is active (filter chips are intentional),
+  //   4) at least one item scored above the model's confidence threshold.
+  // We dedupe these out of the main list below so they appear once,
+  // pinned at the top under a "Recommended for you" header.
+  const recommendations = useMemo<PaletteEntry[]>(() => {
+    if (!recommenderEnabled) return [];
+    if (deferredQuery.trim()) return [];
+    if (kindFilter) return [];
+    if (scoreMap.size === 0) return [];
+    const candidates = baseFiltered
+      .map((e) => ({ entry: e, score: scoreMap.get(recommenderKey(e)) ?? 0 }))
+      .filter(({ entry, score }) => {
+        if (score < confidenceThreshold) return false;
+        // Don't recommend filter chips or commands — those are
+        // navigational, not actions the user wants chosen for them.
+        if (isCommand(entry)) return false;
+        return true;
+      });
+    candidates.sort((a, b) => b.score - a.score);
+    return candidates.slice(0, MAX_RECOMMENDATIONS).map(({ entry }) => entry);
+  }, [baseFiltered, scoreMap, recommenderEnabled, deferredQuery, kindFilter, confidenceThreshold]);
+
+  // Final flat list shown in the palette, in this order:
+  //   1) calc row (when the query is a math expression)
+  //   2) recommended items (when the recommender is confident)
+  //   3) the rest of `baseFiltered`, minus anything pinned above
+  // Keyboard navigation walks one flat array, so selection is just an
+  // index. Section headers are injected during render based on
+  // `recommendations.length`.
   const filtered = useMemo<PaletteEntry[]>(() => {
-    if (kindFilter) return baseFiltered; // don't intrude into a filter chip
-    const calc = evaluateMath(deferredQuery);
-    if (!calc) return baseFiltered;
-    const row: PaletteEntry = {
-      kind: "calc",
-      id: `calc:${calc.expr}`,
-      expr: calc.expr,
-      result: calc.result,
-    };
-    return [row, ...baseFiltered];
-  }, [baseFiltered, deferredQuery, kindFilter]);
+    const calc = !kindFilter ? evaluateMath(deferredQuery) : null;
+    const calcRow: PaletteEntry | null = calc
+      ? {
+          kind: "calc",
+          id: `calc:${calc.expr}`,
+          expr: calc.expr,
+          result: calc.result,
+        }
+      : null;
+    if (recommendations.length === 0) {
+      return calcRow ? [calcRow, ...baseFiltered] : baseFiltered;
+    }
+    const recKeys = new Set(recommendations.map(entryKey));
+    const rest = baseFiltered.filter((e) => !recKeys.has(entryKey(e)));
+    return calcRow
+      ? [calcRow, ...recommendations, ...rest]
+      : [...recommendations, ...rest];
+  }, [baseFiltered, deferredQuery, kindFilter, recommendations]);
 
   // Two-part measurement:
   //   - input paint: time from keystroke to the input element committing
@@ -1253,16 +1370,42 @@ export function Palette({
             </p>
           </div>
         ) : (
-          filtered.map((entry, i) => (
-            <Row
-              key={entryKey(entry)}
-              entry={entry}
-              selected={i === selected}
-              index={i}
-              onHover={handleHover}
-              onClick={handleClick}
-            />
-          ))
+          filtered.map((entry, i) => {
+            // Inject section headers when recommendations are showing.
+            // The "Recommended for you" header sits before the first
+            // recommendation row; an "All" header appears after the
+            // last recommendation, so the rest of the list reads as a
+            // distinct section. Indexing is unaffected — `i` is still
+            // the position in the flat array.
+            const calcOffset =
+              filtered.length > 0 && isCalc(filtered[0]) ? 1 : 0;
+            const recStart = calcOffset;
+            const recEnd = calcOffset + recommendations.length;
+            return (
+              <div
+                key={entryKey(entry)}
+                style={{ display: "contents" }}
+              >
+                {recommendations.length > 0 && i === recStart && (
+                  <div className="results-section-header" aria-hidden>
+                    Recommended for you
+                  </div>
+                )}
+                {recommendations.length > 0 && i === recEnd && (
+                  <div className="results-section-header" aria-hidden>
+                    All
+                  </div>
+                )}
+                <Row
+                  entry={entry}
+                  selected={i === selected}
+                  index={i}
+                  onHover={handleHover}
+                  onClick={handleClick}
+                />
+              </div>
+            );
+          })
         )}
       </div>
 
