@@ -57,6 +57,7 @@ Also: I wanted to learn Tauri 2. This is the project I built to do it.
 | **Find Screenshots** | Side-preview pane on the right. `↵` copies the path, `⌘⇧C` copies the bitmap, `⌘R` reveals in Finder. Folders configurable in Preferences. |
 | **Clipboard history** | Background watcher; `⌘⇧V` opens the history filter directly. |
 | **Smart ranking** | Empty-query view sorts by recents (24-item localStorage cap) → kind priority → alphabetical. Typed queries get a `-0.4` prefix bonus and `-0.18` recents bonus on top of Fuse's score, so `i` lands on iTerm. |
+| **Recommendations** *(experimental)* | Opt-in 7-feature logistic regression trained from the analytics log — frequency, recency, time-of-day, day-of-week, same-session, kind prior, bias. When on, rerank the empty palette so the items the model thinks you'll want now float to the top. Default off; toggle in **Preferences → Recommendations**. Trains and runs entirely on-device. |
 | **Local analytics** | Append-only JSONL at `~/Library/Application Support/davidcast/analytics.jsonl` — `open`, `execute` (with kind, success, duration, query, result count), `no_results` (debounced). Local-only, never leaves the box. |
 | **Window management** | `wm.left` / `right` / `top` / `bottom` / `maximize` / `center` move the frontmost (non-davidcast) window via osascript with the standard hide-then-act trick — Raycast halves without paying for Raycast. |
 | **System quick actions** | Lock / Sleep / Empty Trash / Restart / Shut Down / Log Out — the macOS power menu, two keystrokes away. |
@@ -258,6 +259,7 @@ Everything davidcast persists is a plain JSON (or JSONL) file under `~/Library/A
   themes/
     *.json                     # any extra themes you drop in (built-ins are baked in)
   analytics.jsonl              # append-only event log, one JSON per line
+  recommender_state.json       # only present if Recommendations is on (experimental)
   apps_cache.json              # transient: scanned /Applications results
   icons/                       # transient: extracted .icns → .png cache
   .backup-git/                 # only present if you've wired up a git backup remote
@@ -278,7 +280,8 @@ Everything davidcast persists is a plain JSON (or JSONL) file under `~/Library/A
   "show_snippets_inline": true,
   "show_quicklinks_inline": true,
   "screenshot_dirs": ["~/Desktop", "~/Pictures/Screenshots"],
-  "theme": "default"
+  "theme": "default",
+  "enable_recommendations": false       // opt-in experimental; see below
 }
 ```
 
@@ -328,6 +331,26 @@ One event per line, append-only, never reordered. Three event kinds today:
 ```
 
 `kind` is the event class; `data` is a free-form payload owned by the producer. The `show.analytics` command reads the whole file and renders top queries / items / kind breakdown / daily-opens sparkline / success rate / average dwell. **Local-only** — there is no upload code path. `analytics_clear` deletes the file. The aggregation logic is unit-tested in `desktop/src-tauri/src/analytics.rs`.
+
+### `recommender_state.json` *(experimental, opt-in)*
+
+Set `enable_recommendations: true` in `config.json` (or flick **Preferences → Recommendations**) and davidcast will train a tiny on-device model from your analytics log and write it here. Used to re-rank the empty palette so things you'd actually want surface first.
+
+```jsonc
+{
+  "weights": [0.0, 0.764, -2.077, 0.182, 0.452, 0.938, 0.132],
+  // bias, frequency, recency, time_of_day, day_of_week, same_session, kind_prior
+  "items": { "app:iTerm": { "exec_count": 152, "last_used_ms": 1777161600000, "tod_counts": [42, 60, 31, 19], "dow_counts": [120, 32], "kind": "app" } },
+  "kind_counts": { "app": 230, "snippet": 28, "quicklink": 4 },
+  "train_examples": 262,
+  "last_event_ms": 1777161600000,
+  "trained_at_ms": 1777161900000
+}
+```
+
+What's actually being trained: a 7-feature logistic regression with per-item stats. Pairwise SGD with L2 over 5 shuffled epochs of the log; a synthetic zero-stats negative makes sure even early single-item bursts produce valid training pairs. A 5-min background thread retrains from scratch when ≥30 new events have landed in `analytics.jsonl`. `recommend_clear` deletes the file (your analytics log is untouched). All local — same posture as analytics. The implementation lives in `desktop/src-tauri/src/recommend.rs` with twelve unit tests plus a `cargo test recommender_demo -- --ignored --nocapture` end-to-end demo that prints what the model learned at three different times of day.
+
+**Why "experimental"**: the model is small and the training signal is purely positive (no impression logging — the model never sees "user picked X over Y"), so its rankings shift slowly and may favour the popular over the relevant. Keep an eye on what the empty palette surfaces; if it ever feels worse than the recents-bias default, flip the toggle off.
 
 ### Backup to git
 
