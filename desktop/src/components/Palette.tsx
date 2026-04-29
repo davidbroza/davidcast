@@ -741,6 +741,22 @@ export function Palette({
             setQuery("");
             setKindFilter("skill");
             break;
+          case "screenshots.copy_latest_path": {
+            // One-shot: find the newest screenshot, copy its path to the
+            // clipboard, toast, keep the palette open. The palette stays
+            // open so the user can pick something else right after.
+            outcome = "executed";
+            const rows = await api.searchScreenshots(1);
+            if (rows.length === 0) {
+              setToast("No screenshots found");
+            } else {
+              await api.copyFilePath(rows[0].path);
+              setToast(`Copied: ${rows[0].name}`);
+            }
+            window.setTimeout(() => setToast(null), 1100);
+            inputRef.current?.focus();
+            break;
+          }
           default:
             // Non-filter commands ("Create Snippet", "Open Preferences", …)
             // bubble up to App; mark as a real execution.

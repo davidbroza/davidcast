@@ -836,6 +836,11 @@ fn builtin_commands() -> Vec<CommandEntry> {
             name: "🎉 Throw Confetti".into(),
             subtitle: "Because sometimes you just need a little win".into(),
         },
+        CommandEntry {
+            id: "screenshots.copy_latest_path".into(),
+            name: "Copy Latest Screenshot Path".into(),
+            subtitle: "Newest file across your screenshot dirs — straight to the clipboard".into(),
+        },
     ]
 }
 
