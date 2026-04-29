@@ -46,7 +46,6 @@ export type RecommendStatus = {
   item_count: number;
   weights: number[];
   feature_names: string[];
-  confidence_threshold: number;
   top_items: RecommendTopItem[];
 };
 

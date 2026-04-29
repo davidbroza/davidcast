@@ -299,9 +299,9 @@ export function Preferences({ onClose, onError }: Props) {
                   ({" "}
                   <code>analytics.jsonl</code>
                   {" "}— never leaves the box) and reorders the empty
-                  palette by what's most likely to be useful right now.
-                  When the top guess is high-confidence, you'll see a{" "}
-                  <b>Recommended for you</b> section above the list.
+                  palette by what's most likely to be useful right now,
+                  factoring in time of day and how often you pick each
+                  thing.
                 </div>
               </div>
               <div
@@ -505,9 +505,8 @@ function RecommenderSection({ onError }: { onError: (s: string) => void }) {
             <div className="label-title">What the model thinks you'll want now</div>
             <div className="label-sub">
               Top picks at this exact moment of day, ranked by score (a
-              probability between 0 and 1). Confidence threshold for the{" "}
-              <b>Recommended for you</b> section is{" "}
-              <code>{status.confidence_threshold.toFixed(2)}</code>.
+              probability between 0 and 1). When the toggle above is on,
+              these float to the top of the empty palette.
             </div>
           </div>
           <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "flex", flexDirection: "column", gap: 4 }}>
@@ -531,6 +530,10 @@ function RecommenderSection({ onError }: { onError: (s: string) => void }) {
               </li>
             ))}
           </ul>
+          <div className="label-sub" style={{ marginTop: 4 }}>
+            These are the items most likely to appear at the top of your
+            empty palette right now.
+          </div>
         </div>
       )}
       {status && status.trained && (

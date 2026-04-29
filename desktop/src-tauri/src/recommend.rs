@@ -140,9 +140,6 @@ pub struct RecommenderState {
     pub last_event_ms: u128,
     /// Unix ms when training last completed.
     pub trained_at_ms: u128,
-    /// Sigmoid score above which we treat the top recommendation as
-    /// confident enough to surface in a dedicated section.
-    pub confidence_threshold: f32,
 }
 
 impl Default for RecommenderState {
@@ -154,10 +151,6 @@ impl Default for RecommenderState {
             train_examples: 0,
             last_event_ms: 0,
             trained_at_ms: 0,
-            // 0.65 sigmoid ≈ "this item beats a flat reference by ~0.6 in
-            // log-odds." Calibrated by feel; the user can ignore it if
-            // they prefer.
-            confidence_threshold: 0.65,
         }
     }
 }
@@ -566,7 +559,6 @@ pub struct RecommenderStatus {
     pub item_count: usize,
     pub weights: [f32; N_FEATURES],
     pub feature_names: [&'static str; N_FEATURES],
-    pub confidence_threshold: f32,
     pub top_items: Vec<TopItem>,
 }
 
@@ -620,7 +612,6 @@ pub fn status(state: &RecommenderState) -> RecommenderStatus {
             "same_session",
             "kind_prior",
         ],
-        confidence_threshold: state.confidence_threshold,
         top_items: top,
     }
 }
@@ -1035,29 +1026,6 @@ mod tests {
             println!();
         }
 
-        // Confidence — what would surface in "Recommended for you"?
-        let evening_ts = scenarios[2].1;
-        let mut evening_scores = score_items_at(&state, &inputs_sorted, evening_ts);
-        evening_scores.sort_by(|a, b| {
-            b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal)
-        });
-        let surfaced: Vec<_> = evening_scores
-            .iter()
-            .filter(|s| s.score >= state.confidence_threshold)
-            .take(4)
-            .collect();
-        println!(
-            "At evening, items above the {:.2} confidence threshold (the \"Recommended for you\" pin):",
-            state.confidence_threshold
-        );
-        if surfaced.is_empty() {
-            println!("  (none — recommender stays out of the way)");
-        } else {
-            for s in surfaced {
-                println!("  {:>5.1}%  {}", s.score * 100.0, s.key);
-            }
-        }
-        println!();
         println!("================================================================");
     }
 

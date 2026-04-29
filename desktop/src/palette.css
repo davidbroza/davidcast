@@ -253,18 +253,6 @@ html[data-theme="lcars"] .kind-badge {
   border-radius: 4px;
 }
 
-.results-section-header {
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--fg-dim, rgba(255, 255, 255, 0.45));
-  padding: 8px 14px 4px;
-  font-weight: 600;
-}
-.results-section-header + .results-section-header {
-  display: none;
-}
-
 .empty {
   padding: 40px 20px;
   text-align: center;

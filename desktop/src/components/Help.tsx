@@ -226,7 +226,7 @@ const GROUPS: Group[] = [
       },
       {
         name: "Smart palette ranking",
-        description: "Optional on-device recommender that learns from your usage history (frequency, recency, time-of-day, day-of-week). Re-ranks the empty palette and surfaces a 'Recommended for you' section when confident. Off by default — toggle in Preferences. Trains and runs locally; the model file lives next to your data, never leaves the box.",
+        description: "Optional on-device recommender that learns from your usage history (frequency, recency, time-of-day, day-of-week). When on, the empty palette is reordered by what's most likely useful right now — most-relevant items float to the top, no separate section. Off by default — toggle in Preferences. Trains and runs locally; the model file lives next to your data, never leaves the box.",
       },
       {
         name: "Import from Raycast",
