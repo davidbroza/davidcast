@@ -20,7 +20,9 @@ install:
     # with LSUIElement=true after every build — required to float over
     # another app's fullscreen Space.
     cd desktop && TAURI_SIGNING_PRIVATE_KEY="$(cat {{SIGNING_KEY}})" TAURI_SIGNING_PRIVATE_KEY_PASSWORD="" pnpm tauri build
-    -killall davidcast 2>/dev/null || true
+    # The bundled binary is named `desktop` (CFBundleExecutable), so
+    # `killall davidcast` is a no-op; match by full path instead.
+    -pkill -f /Applications/davidcast.app 2>/dev/null || true
     rm -rf /Applications/davidcast.app
     cp -R desktop/src-tauri/target/release/bundle/macos/davidcast.app /Applications/
     xattr -cr /Applications/davidcast.app
@@ -41,7 +43,9 @@ build:
 
 # Remove davidcast from /Applications. Store at ~/Library/Application Support/davidcast/ is kept.
 uninstall:
-    -killall davidcast 2>/dev/null || true
+    # The bundled binary is named `desktop` (CFBundleExecutable), so
+    # `killall davidcast` is a no-op; match by full path instead.
+    -pkill -f /Applications/davidcast.app 2>/dev/null || true
     rm -rf /Applications/davidcast.app
     @echo "✓ removed /Applications/davidcast.app"
 
