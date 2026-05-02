@@ -929,7 +929,6 @@ export function Palette({
       } else if (isSnippet(entry)) {
         await api.executeSnippet(entry.id);
         setToast("Copied to clipboard");
-        fireConfetti({ count: 60 });
         window.setTimeout(() => {
           setToast(null);
           api.hideAndPaste().catch(() => {});

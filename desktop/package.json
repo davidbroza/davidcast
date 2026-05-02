@@ -9,7 +9,7 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
-    "tauri": "tauri"
+    "tauri": "scripts/tauri.sh"
   },
   "dependencies": {
     "@tauri-apps/api": "^2",

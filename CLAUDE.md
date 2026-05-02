@@ -20,6 +20,8 @@ cargo check --manifest-path src-tauri/Cargo.toml                 # fast Rust typ
 
 There is no JS test runner and no separate lint step — `pnpm build` is the only frontend gate. Rust tests live inline as `#[cfg(test)] mod tests` (see `actions.rs`, `agents.rs`, `commands.rs`).
 
+`pnpm tauri` is wrapped (`desktop/scripts/tauri.sh`) so every `pnpm tauri build` (regardless of where it's invoked from — justfile, CI, or directly) runs `desktop/scripts/patch-info-plist.sh` afterwards, which inserts `LSUIElement=true` into the bundle's `Info.plist`. Tauri 2's bundle config can't set arbitrary `Info.plist` keys, and `LSUIElement` is what tells macOS the bundle is a true menu-bar utility — without it the palette can't float over another app's fullscreen Space, even with `NSWindow` level=screensaver and `CanJoinAllSpaces`. `dev` and other tauri subcommands `exec` straight through.
+
 ## Architecture
 
 **One Tauri app, two webviews, one Rust core.** `desktop/src-tauri/src/lib.rs` owns startup: it loads the JSON store into a `RwLock<Store>` managed by Tauri, registers the `⌥ Space` global shortcut, builds the menu-bar tray, and sets `ActivationPolicy::Accessory` so there's no dock icon. The frontend bundle is shared between two windows — `main` (the palette) and `prefs` — distinguished at runtime by `?view=prefs` in the URL; `desktop/src/main.tsx` reads that param and mounts either `App` or `Preferences`.
