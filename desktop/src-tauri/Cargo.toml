@@ -1,6 +1,6 @@
 [package]
 name = "desktop"
-version = "0.2.2"
+version = "0.2.3"
 description = "davidcast"
 authors = ["David Broza"]
 edition = "2021"

@@ -18,9 +18,10 @@
 use objc2::rc::Retained;
 use objc2::runtime::{NSObjectProtocol, ProtocolObject};
 use objc2_app_kit::{
-    NSScreenSaverWindowLevel, NSWindow, NSWindowAnimationBehavior, NSWindowCollectionBehavior,
+    NSApplication, NSScreenSaverWindowLevel, NSWindow, NSWindowAnimationBehavior,
+    NSWindowCollectionBehavior,
 };
-use objc2_foundation::{NSActivityOptions, NSProcessInfo, NSString};
+use objc2_foundation::{MainThreadMarker, NSActivityOptions, NSProcessInfo, NSString};
 use std::sync::OnceLock;
 
 /// Disable the slide-in animation when the palette window is shown. Called
@@ -70,6 +71,27 @@ pub unsafe fn make_visible_over_fullscreen(ns_window: *mut std::ffi::c_void) {
     // only window the user interacts with, and "deactivate" fires
     // every time their focus moves to the underlying app.
     window.setHidesOnDeactivate(false);
+}
+
+/// Bring davidcast (an LSUIElement / accessory app) to the front so the
+/// palette can take key focus inside another app's fullscreen Space.
+/// Without this, `NSWindow.makeKeyAndOrderFront` (what Tauri's
+/// `set_focus` ends up calling) is allowed to *show* the window over
+/// fullscreen content, but text input may still go to the underlying
+/// fullscreen app — pressing keys does nothing in our search field.
+///
+/// `ignoringOtherApps: true` is the same flag Raycast/Spotlight use.
+pub fn activate_app() {
+    let Some(mtm) = MainThreadMarker::new() else {
+        return;
+    };
+    let app = NSApplication::sharedApplication(mtm);
+    // `activateIgnoringOtherApps:` is deprecated in macOS 14+ but is the
+    // only path that reliably brings an LSUIElement app to the front
+    // *across a fullscreen Space boundary*. The non-deprecated `activate`
+    // is a no-op for accessory apps that aren't already frontmost.
+    #[allow(deprecated)]
+    app.activateIgnoringOtherApps(true);
 }
 
 /// Holds the activity returned by NSProcessInfo so it stays retained for

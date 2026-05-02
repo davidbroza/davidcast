@@ -72,9 +72,20 @@ pub fn toggle_palette(app: &AppHandle) {
             let _ = w.hide();
         }
         _ => {
+            // Set NSWindow level + collection behavior BEFORE show()
+            // so the window orderFronts at screen-saver level on the
+            // *active* Space, not at default level on the home Space.
+            apply_fullscreen_overlay(&w);
             let _ = w.center();
             let _ = w.show();
+            // Bring davidcast (LSUIElement) to the front across the
+            // fullscreen-Space boundary so the search field can take key
+            // input. Without this, set_focus alone doesn't always grab
+            // keys when another app is in fullscreen.
+            activate_app();
             let _ = w.set_focus();
+            // Belt-and-suspenders: re-apply level after show in case
+            // any Tauri internal flips it back.
             apply_fullscreen_overlay(&w);
             // Nudge the frontend to reset its state (clear query, refetch).
             let _ = app.emit("palette:show", ());
@@ -86,8 +97,10 @@ pub fn open_clipboard(app: &AppHandle) {
     let Some(w) = app.get_webview_window("main") else {
         return;
     };
+    apply_fullscreen_overlay(&w);
     let _ = w.center();
     let _ = w.show();
+    activate_app();
     let _ = w.set_focus();
     apply_fullscreen_overlay(&w);
     let _ = app.emit("clipboard:show", ());
@@ -108,3 +121,11 @@ fn apply_fullscreen_overlay(w: &tauri::WebviewWindow) {
 
 #[cfg(not(target_os = "macos"))]
 fn apply_fullscreen_overlay(_: &tauri::WebviewWindow) {}
+
+#[cfg(target_os = "macos")]
+fn activate_app() {
+    crate::macos_perf::activate_app();
+}
+
+#[cfg(not(target_os = "macos"))]
+fn activate_app() {}
