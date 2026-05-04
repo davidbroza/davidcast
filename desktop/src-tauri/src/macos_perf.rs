@@ -81,6 +81,12 @@ pub unsafe fn make_visible_over_fullscreen(ns_window: *mut std::ffi::c_void) {
 /// fullscreen app — pressing keys does nothing in our search field.
 ///
 /// `ignoringOtherApps: true` is the same flag Raycast/Spotlight use.
+///
+/// **Must be called BEFORE `show()`**, not after. `show()` internally
+/// calls `orderFront:` which respects app-activation order; if our
+/// LSUIElement app is still inactive at that point, the window is
+/// ordered onto the user's home Space, not the fullscreen Space they're
+/// currently in — they see the palette "open behind" the fullscreen app.
 pub fn activate_app() {
     let Some(mtm) = MainThreadMarker::new() else {
         return;
@@ -92,6 +98,22 @@ pub fn activate_app() {
     // is a no-op for accessory apps that aren't already frontmost.
     #[allow(deprecated)]
     app.activateIgnoringOtherApps(true);
+}
+
+/// Force the window to the front regardless of app-activation state.
+/// Tauri's `show()` calls `orderFront:`, which on an inactive app may
+/// not cross the fullscreen-Space boundary even after we've activated.
+/// `orderFrontRegardless` is the no-questions-asked variant Spotlight
+/// uses — required as a final belt-and-suspenders for fullscreen Spaces.
+///
+/// # Safety
+/// Same as `disable_window_animation`.
+pub unsafe fn order_front_regardless(ns_window: *mut std::ffi::c_void) {
+    if ns_window.is_null() {
+        return;
+    }
+    let window: &NSWindow = unsafe { &*(ns_window as *const NSWindow) };
+    window.orderFrontRegardless();
 }
 
 /// Holds the activity returned by NSProcessInfo so it stays retained for

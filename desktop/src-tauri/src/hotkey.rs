@@ -72,22 +72,30 @@ pub fn toggle_palette(app: &AppHandle) {
             let _ = w.hide();
         }
         _ => {
-            // Set NSWindow level + collection behavior BEFORE show()
-            // so the window orderFronts at screen-saver level on the
-            // *active* Space, not at default level on the home Space.
+            // Step order is load-bearing for "appear over a fullscreen
+            // app". Don't reorder without testing in fullscreen Safari.
+            //
+            //   1. Activate this LSUIElement app FIRST. orderFront on an
+            //      inactive accessory app does not cross the fullscreen-
+            //      Space boundary — the window ends up on the user's
+            //      home Space and they see the palette "open behind"
+            //      the fullscreen app. v0.2.3 had show() before
+            //      activate; this was the actual bug.
+            //   2. Set NSWindow level + CanJoinAllSpaces|FullScreenAux
+            //      *before* show, so the orderFront in show() lands at
+            //      screen-saver level on the active Space.
+            //   3. show() calls orderFront:, which respects app order;
+            //      we follow it with orderFrontRegardless to punch
+            //      through unconditionally (Spotlight pattern).
+            //   4. Re-apply overlay — Tauri's alwaysOnTop handling can
+            //      reset the level back to floating after show.
+            activate_app();
             apply_fullscreen_overlay(&w);
             let _ = w.center();
             let _ = w.show();
-            // Bring davidcast (LSUIElement) to the front across the
-            // fullscreen-Space boundary so the search field can take key
-            // input. Without this, set_focus alone doesn't always grab
-            // keys when another app is in fullscreen.
-            activate_app();
+            order_front_regardless(&w);
             let _ = w.set_focus();
-            // Belt-and-suspenders: re-apply level after show in case
-            // any Tauri internal flips it back.
             apply_fullscreen_overlay(&w);
-            // Nudge the frontend to reset its state (clear query, refetch).
             let _ = app.emit("palette:show", ());
         }
     }
@@ -97,10 +105,12 @@ pub fn open_clipboard(app: &AppHandle) {
     let Some(w) = app.get_webview_window("main") else {
         return;
     };
+    // Same step order as toggle_palette — see the comment there.
+    activate_app();
     apply_fullscreen_overlay(&w);
     let _ = w.center();
     let _ = w.show();
-    activate_app();
+    order_front_regardless(&w);
     let _ = w.set_focus();
     apply_fullscreen_overlay(&w);
     let _ = app.emit("clipboard:show", ());
@@ -129,3 +139,15 @@ fn activate_app() {
 
 #[cfg(not(target_os = "macos"))]
 fn activate_app() {}
+
+#[cfg(target_os = "macos")]
+fn order_front_regardless(w: &tauri::WebviewWindow) {
+    if let Ok(ns_window) = w.ns_window() {
+        unsafe {
+            crate::macos_perf::order_front_regardless(ns_window);
+        }
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn order_front_regardless(_: &tauri::WebviewWindow) {}
