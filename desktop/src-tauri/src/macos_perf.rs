@@ -16,12 +16,14 @@
 #![cfg(target_os = "macos")]
 
 use objc2::rc::Retained;
-use objc2::runtime::{NSObjectProtocol, ProtocolObject};
+use objc2::runtime::{AnyClass, AnyObject, Bool, ClassBuilder, NSObjectProtocol, ProtocolObject, Sel};
+use objc2::sel;
 use objc2_app_kit::{
     NSApplication, NSScreenSaverWindowLevel, NSWindow, NSWindowAnimationBehavior,
-    NSWindowCollectionBehavior,
+    NSWindowCollectionBehavior, NSWindowStyleMask,
 };
-use objc2_foundation::{MainThreadMarker, NSActivityOptions, NSProcessInfo, NSString};
+use objc2_foundation::{MainThreadMarker, NSActivityOptions, NSObject, NSProcessInfo, NSString};
+use std::ffi::CStr;
 use std::sync::OnceLock;
 
 /// Disable the slide-in animation when the palette window is shown. Called
@@ -98,6 +100,71 @@ pub fn activate_app() {
     // is a no-op for accessory apps that aren't already frontmost.
     #[allow(deprecated)]
     app.activateIgnoringOtherApps(true);
+}
+
+/// Convert the regular NSWindow Tauri creates into an NSPanel-derived
+/// class with the `NonactivatingPanel` style mask. This is the *actual*
+/// Spotlight / Raycast / Alfred trick — without it, even with all the
+/// right window level + collection behavior + activation calls, an
+/// LSUIElement app's regular NSWindow does not appear over another
+/// app's fullscreen Space. The system treats only NSPanels with this
+/// style mask as "true" floating utility windows.
+///
+/// Plain NSPanel isn't quite enough either: `canBecomeKeyWindow` and
+/// `canBecomeMainWindow` return NO for borderless panels, which is why
+/// the first NSPanel attempt could float over fullscreen but couldn't
+/// receive keyboard input (typing did nothing, Esc did nothing). We
+/// register a runtime subclass `DavidcastPanel` that overrides both to
+/// return YES, then swap the existing window's `isa` to it. NSPanel
+/// adds no ivars to NSWindow, so a class swap is layout-safe.
+///
+/// Called once during setup, before `make_visible_over_fullscreen`.
+///
+/// # Safety
+/// Same as `disable_window_animation`. Must run after Tauri finishes
+/// constructing the window.
+pub unsafe fn make_panel(ns_window: *mut std::ffi::c_void) {
+    if ns_window.is_null() {
+        return;
+    }
+    let cls = davidcast_panel_class();
+    let obj: &AnyObject = unsafe { &*(ns_window as *const AnyObject) };
+    unsafe { AnyObject::set_class(obj, cls) };
+    let window: &NSWindow = unsafe { &*(ns_window as *const NSWindow) };
+    let mask = window.styleMask() | NSWindowStyleMask::NonactivatingPanel;
+    window.setStyleMask(mask);
+}
+
+extern "C" fn yes_bool(_this: &NSObject, _cmd: Sel) -> Bool {
+    Bool::YES
+}
+
+/// Register (once) a custom NSPanel subclass that always reports it can
+/// become key + main. Required because borderless NSPanels return NO
+/// from those defaults — the panel floats over fullscreen but can't
+/// take keyboard input.
+fn davidcast_panel_class() -> &'static AnyClass {
+    static CLASS: OnceLock<&'static AnyClass> = OnceLock::new();
+    CLASS.get_or_init(|| {
+        let panel = AnyClass::get(CStr::from_bytes_with_nul(b"NSPanel\0").unwrap())
+            .expect("NSPanel class must exist on macOS");
+        let mut builder = ClassBuilder::new(
+            CStr::from_bytes_with_nul(b"DavidcastPanel\0").unwrap(),
+            panel,
+        )
+        .expect("DavidcastPanel class registration failed");
+        unsafe {
+            builder.add_method(
+                sel!(canBecomeKeyWindow),
+                yes_bool as extern "C" fn(_, _) -> _,
+            );
+            builder.add_method(
+                sel!(canBecomeMainWindow),
+                yes_bool as extern "C" fn(_, _) -> _,
+            );
+        }
+        builder.register()
+    })
 }
 
 /// Force the window to the front regardless of app-activation state.

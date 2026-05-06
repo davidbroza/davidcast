@@ -62,9 +62,13 @@ pub fn run() {
                     if let Ok(ns_window) = w.ns_window() {
                         unsafe {
                             macos_perf::disable_window_animation(ns_window);
-                            // Float over fullscreen apps + appear on every
-                            // Space — without this, ⌥Space did nothing
-                            // while another app was fullscreen.
+                            // Convert the window to an NSPanel with the
+                            // NonactivatingPanel style. Must come before
+                            // make_visible_over_fullscreen — the level
+                            // + collection-behavior story only actually
+                            // floats over fullscreen Spaces when the
+                            // backing window is an NSPanel.
+                            macos_perf::make_panel(ns_window);
                             macos_perf::make_visible_over_fullscreen(ns_window);
                         }
                     }
