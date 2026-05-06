@@ -45,10 +45,19 @@ export function evaluateMath(input: string): CalcResult | null {
 
   // Strip natural-language preamble.
   s = s.replace(/^(what'?s|what is|calc(ulate)?|=)\s+/i, "");
-  // "X% of Y" → "(X/100)*Y"
-  s = s.replace(/(\d+(?:\.\d+)?)%\s*of\s*/gi, "($1/100)*");
+  // Strip a trailing "=" — users type "1+1 =" out of habit. Common
+  // enough in our analytics no_results to be the actual top calculator
+  // miss.
+  s = s.replace(/\s*=\s*$/, "");
+  // "X% of Y" / "X% out of Y" → "(X/100)*Y". The "out of" form is what
+  // people actually type ("20% out of 100") even though "of" is the
+  // mathematically minimal phrasing.
+  s = s.replace(/(\d+(?:\.\d+)?)%\s*(?:out\s+of|of)\s*/gi, "($1/100)*");
   // Standalone X% → (X/100). Run AFTER "of" so we don't double-rewrite.
   s = s.replace(/(\d+(?:\.\d+)?)%/g, "($1/100)");
+  // x / × as multiplication. Only when surrounded by digits or
+  // whitespace so we don't break identifiers like "exp" or "max".
+  s = s.replace(/(?<=\d|\s)[x×](?=\d|\s)/gi, "*");
   // ^ → **  (caret as power)
   s = s.replace(/\^/g, "**");
   // Strip thousand separators between digits ("1,000" → "1000") but keep

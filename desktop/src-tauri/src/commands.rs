@@ -750,6 +750,16 @@ pub struct CommandEntry {
     pub id: String,
     pub name: String,
     pub subtitle: String,
+    /// Normalized search alias. Computed from `name` by stripping any
+    /// leading emoji + whitespace and lowercasing. Both Fuse's `keyword`
+    /// key (weight 3) and the short-query prefix path consult this — so
+    /// "🎉 Throw Confetti" becomes findable by typing "throw" or
+    /// "confetti", not just exact substring matches that Fuse's bitap
+    /// gets distracted from when the corpus starts with a non-letter.
+    /// Real bug from analytics: queries "Confetti" / "confetti" / "confetto"
+    /// all hit no_results before this field existed.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub keyword: Option<String>,
 }
 
 /// Wire-format wrapper that pairs a container with the action mode the row
@@ -785,184 +795,240 @@ pub enum PaletteEntry {
     Skill(SkillEntry),
 }
 
+/// Strip a leading emoji + whitespace from a command's display name and
+/// lowercase the rest, producing the search alias that Fuse and the
+/// short-query prefix path key off. Returns `None` when the name is
+/// already plain (no normalization needed) — Fuse already searches the
+/// `name` field at weight 2.
+fn derive_keyword(name: &str) -> Option<String> {
+    let trimmed = name
+        .trim_start_matches(|c: char| {
+            c.is_whitespace() || (!c.is_ascii_alphanumeric() && !c.is_alphabetic())
+        })
+        .to_lowercase();
+    if trimmed.is_empty() || trimmed == name.to_lowercase() {
+        return None;
+    }
+    Some(trimmed)
+}
+
 fn builtin_commands() -> Vec<CommandEntry> {
-    vec![
+    let mut commands: Vec<CommandEntry> = vec![
         CommandEntry {
             id: "create.snippet".into(),
             name: "Create Snippet".into(),
             subtitle: "New snippet in this workspace".into(),
+            keyword: None,
         },
         CommandEntry {
             id: "create.quicklink".into(),
             name: "Create Quicklink".into(),
             subtitle: "New quicklink in this workspace".into(),
+            keyword: None,
         },
         CommandEntry {
             id: "search.snippets".into(),
             name: "Search Snippets".into(),
             subtitle: "Browse only your snippets".into(),
+            keyword: None,
         },
         CommandEntry {
             id: "search.quicklinks".into(),
             name: "Search Quicklinks".into(),
             subtitle: "Browse only your quicklinks".into(),
+            keyword: None,
         },
         CommandEntry {
             id: "show.clipboard".into(),
             name: "Show Clipboard History".into(),
             subtitle: "Recent items you've copied — ⌘⇧V".into(),
+            keyword: None,
         },
         CommandEntry {
             id: "show.agents".into(),
             name: "Show Running Agents".into(),
             subtitle: "Claude CLI sessions — jump back to the terminal".into(),
+            keyword: None,
         },
         CommandEntry {
             id: "show.vite".into(),
             name: "Show Vite Ports".into(),
             subtitle: "Running Vite dev servers — open in browser".into(),
+            keyword: None,
         },
         CommandEntry {
             id: "show.docker".into(),
             name: "Show Docker Containers".into(),
             subtitle: "Running containers — shell in or follow logs".into(),
+            keyword: None,
         },
         CommandEntry {
             id: "files.find".into(),
             name: "Find Files".into(),
             subtitle: "fd-backed search — :png, :img, :newest filters".into(),
+            keyword: None,
         },
         CommandEntry {
             id: "files.screenshots".into(),
             name: "Find Screenshots".into(),
             subtitle: "Most recent images on Desktop & Pictures".into(),
+            keyword: None,
         },
         CommandEntry {
             id: "skills.search".into(),
             name: "Search Skills".into(),
             subtitle: "Browse Claude Code SKILL.md files — preview, copy path, open".into(),
+            keyword: None,
         },
         CommandEntry {
             id: "wm.left".into(),
             name: "Window: Left Half".into(),
             subtitle: "Resize the frontmost window to the left half".into(),
+            keyword: None,
         },
         CommandEntry {
             id: "wm.right".into(),
             name: "Window: Right Half".into(),
             subtitle: "Resize the frontmost window to the right half".into(),
+            keyword: None,
         },
         CommandEntry {
             id: "wm.top".into(),
             name: "Window: Top Half".into(),
             subtitle: "Resize the frontmost window to the top half".into(),
+            keyword: None,
         },
         CommandEntry {
             id: "wm.bottom".into(),
             name: "Window: Bottom Half".into(),
             subtitle: "Resize the frontmost window to the bottom half".into(),
+            keyword: None,
         },
         CommandEntry {
             id: "wm.maximize".into(),
             name: "Window: Maximize".into(),
             subtitle: "Fill the visible desktop".into(),
+            keyword: None,
         },
         CommandEntry {
             id: "wm.center".into(),
             name: "Window: Center".into(),
             subtitle: "Two-thirds size, centred".into(),
+            keyword: None,
         },
         CommandEntry {
             id: "themes.switch".into(),
             name: "Switch Theme".into(),
             subtitle: "Pick a colour theme — built-in or your own JSON".into(),
+            keyword: None,
         },
         CommandEntry {
             id: "system.lock".into(),
             name: "Lock Screen".into(),
             subtitle: "Lock the Mac (⌃⌘Q)".into(),
+            keyword: None,
         },
         CommandEntry {
             id: "system.sleep".into(),
             name: "Sleep".into(),
             subtitle: "Put the Mac to sleep".into(),
+            keyword: None,
         },
         CommandEntry {
             id: "system.empty_trash".into(),
             name: "Empty Trash".into(),
             subtitle: "Permanently delete everything in Trash".into(),
+            keyword: None,
         },
         CommandEntry {
             id: "system.restart".into(),
             name: "Restart".into(),
             subtitle: "Restart the Mac (confirms before)".into(),
+            keyword: None,
         },
         CommandEntry {
             id: "system.shut_down".into(),
             name: "Shut Down".into(),
             subtitle: "Shut down the Mac (confirms before)".into(),
+            keyword: None,
         },
         CommandEntry {
             id: "system.log_out".into(),
             name: "Log Out".into(),
             subtitle: "Log out of your macOS user (confirms before)".into(),
+            keyword: None,
         },
         CommandEntry {
             id: "open.preferences".into(),
             name: "Open Preferences".into(),
             subtitle: "Autostart, workspaces, import".into(),
+            keyword: None,
         },
         CommandEntry {
             id: "help.show".into(),
             name: "Show Help".into(),
             subtitle: "Every davidcast feature, command, and shortcut".into(),
+            keyword: None,
         },
         CommandEntry {
             id: "show.analytics".into(),
             name: "Show Analytics".into(),
             subtitle: "Top queries, top items, daily activity — local only".into(),
+            keyword: None,
         },
         CommandEntry {
             id: "show.stats".into(),
             name: "Show System Stats".into(),
             subtitle: "CPU load, memory, disk, battery, thermal — local snapshot".into(),
+            keyword: None,
         },
         CommandEntry {
             id: "app.check_updates".into(),
             name: "Check for Updates".into(),
             subtitle: "Ping the release endpoint and install if newer".into(),
+            keyword: None,
         },
         CommandEntry {
             id: "switch.workspace".into(),
             name: "Switch Workspace".into(),
             subtitle: "Change the active workspace".into(),
+            keyword: None,
         },
         CommandEntry {
             id: "fx.confetti".into(),
             name: "🎉 Throw Confetti".into(),
             subtitle: "Because sometimes you just need a little win".into(),
+            keyword: None,
         },
         CommandEntry {
             id: "screenshots.copy_latest_path".into(),
             name: "Copy Latest Screenshot Path".into(),
             subtitle: "Newest file across your screenshot dirs — straight to the clipboard".into(),
+            keyword: None,
         },
         CommandEntry {
             id: "github.prs".into(),
             name: "Show GitHub PRs".into(),
             subtitle: "Open pull requests across your tracked repos".into(),
+            keyword: None,
         },
         CommandEntry {
             id: "github.issues".into(),
             name: "Search GitHub Issues".into(),
             subtitle: "Open issues across your tracked repos — type to filter".into(),
+            keyword: None,
         },
         CommandEntry {
             id: "github.assigned".into(),
             name: "GitHub Issues Assigned to Me".into(),
             subtitle: "Anything @me is on, across all of GitHub".into(),
+            keyword: None,
         },
-    ]
+    ];
+    for c in commands.iter_mut() {
+        c.keyword = derive_keyword(&c.name);
+    }
+    commands
 }
 
 #[tauri::command]

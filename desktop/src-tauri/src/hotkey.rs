@@ -45,6 +45,14 @@ pub fn clipboard_shortcut() -> Shortcut {
     Shortcut::new(Some(Modifiers::SUPER | Modifiers::SHIFT), Code::KeyV)
 }
 
+pub fn iterm_shortcut() -> Shortcut {
+    // ⌃⌥I — dedicated iTerm launcher. iTerm accounts for ~40% of all
+    // palette executes by analytics, almost always reached via "ite" +
+    // Enter. A single hotkey saves three keystrokes per launch and
+    // skips the palette UI entirely.
+    Shortcut::new(Some(Modifiers::CONTROL | Modifiers::ALT), Code::KeyI)
+}
+
 pub fn on_palette_shortcut(app: &AppHandle, _shortcut: &Shortcut, state: ShortcutState) {
     if state != ShortcutState::Pressed {
         return;
@@ -61,6 +69,20 @@ pub fn on_clipboard_shortcut(app: &AppHandle, _shortcut: &Shortcut, state: Short
     }
     LAST_HOTKEY_MS.store(now_ms(), Ordering::SeqCst);
     open_clipboard(app);
+}
+
+pub fn on_iterm_shortcut(_app: &AppHandle, _shortcut: &Shortcut, state: ShortcutState) {
+    if state != ShortcutState::Pressed {
+        return;
+    }
+    LAST_HOTKEY_MS.store(now_ms(), Ordering::SeqCst);
+    // Direct launch — don't surface the palette. `open -a iTerm` uses
+    // LaunchServices to resolve the bundle, so it works regardless of
+    // install location.
+    let _ = std::process::Command::new("open")
+        .arg("-a")
+        .arg("iTerm")
+        .status();
 }
 
 pub fn toggle_palette(app: &AppHandle) {

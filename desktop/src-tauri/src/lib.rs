@@ -79,10 +79,11 @@ pub fn run() {
             let store = store::Store::load().expect("failed to load davidcast store");
             app.manage(RwLock::new(store));
 
-            // Register global hotkeys: palette + clipboard.
+            // Register global hotkeys: palette + clipboard + iTerm.
             let handle = app.handle().clone();
             let palette_sc = hotkey::default_shortcut();
             let clipboard_sc = hotkey::clipboard_shortcut();
+            let iterm_sc = hotkey::iterm_shortcut();
             app.global_shortcut().on_shortcut(palette_sc, {
                 let handle = handle.clone();
                 move |_app, sc, event| {
@@ -93,6 +94,12 @@ pub fn run() {
                 let handle = handle.clone();
                 move |_app, sc, event| {
                     hotkey::on_clipboard_shortcut(&handle, sc, event.state);
+                }
+            })?;
+            app.global_shortcut().on_shortcut(iterm_sc, {
+                let handle = handle.clone();
+                move |_app, sc, event| {
+                    hotkey::on_iterm_shortcut(&handle, sc, event.state);
                 }
             })?;
 

@@ -32,6 +32,11 @@ const GROUPS: Group[] = [
         description: "Global hotkey. Hides on blur so it always feels like a launcher.",
       },
       {
+        name: "Launch iTerm",
+        shortcut: <><kbd>⌃</kbd>+<kbd>⌥</kbd>+<kbd>I</kbd></>,
+        description: "Direct hotkey — bypasses the palette. iTerm is the most-launched item by analytics, so it earns its own shortcut.",
+      },
+      {
         name: "Run / open selected",
         shortcut: <kbd>↵</kbd>,
         description: "Default action depends on the row kind — paste a snippet, open an app, follow a quicklink, etc.",
