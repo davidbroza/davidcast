@@ -106,6 +106,18 @@ pub fn run() {
             // Background clipboard watcher.
             clipboard::start_watcher(app.handle().clone());
 
+            // Warm the /Applications scan cache off the open critical path.
+            // `apps::list_apps` was the dominant cost in `list_palette`;
+            // this thread runs the scan now and every 60s thereafter so
+            // every palette open hits an in-memory cache.
+            apps::start_background_refresher();
+
+            // Drain analytics writes on a dedicated thread so each
+            // `analytics_record` Tauri command returns instantly (push to
+            // queue, no file I/O on the call path). Per-keystroke logging
+            // never blocks the UI even if the disk is contended.
+            analytics::start_writer_thread();
+
             // Background backup auto-sync.
             //
             // Wakes every 60s and pushes when:

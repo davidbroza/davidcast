@@ -3,7 +3,9 @@ use serde::Serialize;
 use std::collections::HashMap;
 use std::io::Write;
 use std::path::PathBuf;
-use std::sync::Mutex;
+use std::sync::mpsc::{self, Sender};
+use std::sync::{Mutex, OnceLock};
+use std::time::Duration;
 
 /// Append-only JSONL log of palette interactions, written next to the JSON
 /// store at `~/Library/Application Support/davidcast/analytics.jsonl`.
@@ -23,9 +25,19 @@ pub struct AnalyticsEvent {
     pub data: serde_json::Value,
 }
 
-/// Serialize calls so concurrent writes never interleave a single record.
-/// One line in, one line out.
+/// Held only by the writer thread (or by `clear`, which has to coordinate
+/// with the writer) so concurrent flushes never interleave a single record.
 static WRITE_LOCK: Mutex<()> = Mutex::new(());
+
+/// Channel into the dedicated writer thread. `record` returns as soon as
+/// the event is pushed here — file I/O happens off the Tauri command path
+/// so per-keystroke `analytics_record` calls never block the UI.
+static SENDER: OnceLock<Sender<AnalyticsEvent>> = OnceLock::new();
+
+/// How long the writer waits for more events before flushing the batch.
+/// Short enough that summarize-after-action sees fresh data, long enough
+/// that bursts of keystroke events flatten into one file open.
+const BATCH_WINDOW_MS: u64 = 50;
 
 pub fn log_path() -> Option<PathBuf> {
     crate::store::Store::root_dir()
@@ -33,34 +45,65 @@ pub fn log_path() -> Option<PathBuf> {
         .map(|p| p.join("analytics.jsonl"))
 }
 
+/// Spawn the writer thread. Call once at app setup. Safe to call multiple
+/// times — only the first one wins via `OnceLock`.
+pub fn start_writer_thread() {
+    SENDER.get_or_init(spawn_writer);
+}
+
+fn spawn_writer() -> Sender<AnalyticsEvent> {
+    let (tx, rx) = mpsc::channel::<AnalyticsEvent>();
+    std::thread::spawn(move || {
+        while let Ok(first) = rx.recv() {
+            let mut batch = vec![first];
+            while let Ok(more) = rx.recv_timeout(Duration::from_millis(BATCH_WINDOW_MS)) {
+                batch.push(more);
+            }
+            flush_batch(&batch);
+        }
+    });
+    tx
+}
+
+fn flush_batch(events: &[AnalyticsEvent]) {
+    let Some(path) = log_path() else { return };
+    if let Some(parent) = path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    let mut buf = String::with_capacity(events.len() * 128);
+    for ev in events {
+        if let Ok(line) = serde_json::to_string(ev) {
+            buf.push_str(&line);
+            buf.push('\n');
+        }
+    }
+    if buf.is_empty() {
+        return;
+    }
+    let _guard = WRITE_LOCK.lock().unwrap();
+    if let Ok(mut f) = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&path)
+    {
+        let _ = f.write_all(buf.as_bytes());
+    }
+}
+
 pub fn record(
     session_id: String,
     kind: String,
     data: serde_json::Value,
 ) -> Result<(), String> {
-    let Some(path) = log_path() else {
-        return Err("no data dir".into());
-    };
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
-    }
     let event = AnalyticsEvent {
         ts: now_ms(),
         session_id,
         kind,
         data,
     };
-    let mut line = serde_json::to_string(&event).map_err(|e| e.to_string())?;
-    line.push('\n');
-
-    let _guard = WRITE_LOCK.lock().unwrap();
-    let mut f = std::fs::OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(&path)
-        .map_err(|e| e.to_string())?;
-    f.write_all(line.as_bytes()).map_err(|e| e.to_string())?;
-    Ok(())
+    // Lazily spawn the writer if `start_writer_thread` wasn't called (tests).
+    let tx = SENDER.get_or_init(spawn_writer);
+    tx.send(event).map_err(|e| e.to_string())
 }
 
 fn now_ms() -> u128 {
