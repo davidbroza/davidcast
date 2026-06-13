@@ -71,16 +71,12 @@ struct ViteProc {
 }
 
 fn collect_vite_processes() -> Vec<ViteProc> {
-    let Ok(output) = std::process::Command::new("ps")
-        .args(["-axo", "pid=,etime=,comm=,args="])
-        .output()
-    else {
+    let mut cmd = std::process::Command::new("ps");
+    cmd.args(["-axo", "pid=,etime=,comm=,args="]);
+    let Some(stdout) = crate::proc::capture_stdout(cmd, std::time::Duration::from_secs(3)) else {
         return Vec::new();
     };
-    if !output.status.success() {
-        return Vec::new();
-    }
-    String::from_utf8_lossy(&output.stdout)
+    String::from_utf8_lossy(&stdout)
         .lines()
         .filter_map(parse_ps_line)
         .filter(|p| is_vite(&p.0, &p.1))
@@ -137,14 +133,10 @@ fn looks_like_vite_args(args: &str) -> bool {
 }
 
 fn get_cwd(pid: i32) -> Option<String> {
-    let output = std::process::Command::new("lsof")
-        .args(["-a", "-d", "cwd", "-p", &pid.to_string(), "-F", "n"])
-        .output()
-        .ok()?;
-    if !output.status.success() {
-        return None;
-    }
-    String::from_utf8_lossy(&output.stdout)
+    let mut cmd = std::process::Command::new("lsof");
+    cmd.args(["-a", "-d", "cwd", "-p", &pid.to_string(), "-F", "n"]);
+    let stdout = crate::proc::capture_stdout(cmd, std::time::Duration::from_secs(2))?;
+    String::from_utf8_lossy(&stdout)
         .lines()
         .find_map(|l| l.strip_prefix('n').map(|s| s.to_string()))
 }
@@ -160,19 +152,15 @@ struct Listener {
 /// descriptor, so a single listening socket can show up several times — dedupe
 /// by (pid, port).
 fn collect_listeners() -> Vec<Listener> {
-    let Ok(output) = std::process::Command::new("lsof")
-        .args(["-iTCP", "-sTCP:LISTEN", "-P", "-n", "-F", "pn"])
-        .output()
-    else {
+    let mut cmd = std::process::Command::new("lsof");
+    cmd.args(["-iTCP", "-sTCP:LISTEN", "-P", "-n", "-F", "pn"]);
+    let Some(stdout) = crate::proc::capture_stdout(cmd, std::time::Duration::from_secs(3)) else {
         return Vec::new();
     };
-    if !output.status.success() {
-        return Vec::new();
-    }
     let mut out: Vec<Listener> = Vec::new();
     let mut seen: std::collections::HashSet<(i32, u16)> = std::collections::HashSet::new();
     let mut current_pid: Option<i32> = None;
-    for line in String::from_utf8_lossy(&output.stdout).lines() {
+    for line in String::from_utf8_lossy(&stdout).lines() {
         if let Some(p) = line.strip_prefix('p') {
             current_pid = p.parse::<i32>().ok();
         } else if let Some(name) = line.strip_prefix('n') {

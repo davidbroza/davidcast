@@ -64,16 +64,12 @@ struct Proc {
 }
 
 fn collect_processes() -> Vec<Proc> {
-    let Ok(output) = std::process::Command::new("ps")
-        .args(["-axo", "pid=,ppid=,etime=,tty=,comm=,args="])
-        .output()
-    else {
+    let mut cmd = std::process::Command::new("ps");
+    cmd.args(["-axo", "pid=,ppid=,etime=,tty=,comm=,args="]);
+    let Some(stdout) = crate::proc::capture_stdout(cmd, std::time::Duration::from_secs(3)) else {
         return Vec::new();
     };
-    if !output.status.success() {
-        return Vec::new();
-    }
-    String::from_utf8_lossy(&output.stdout)
+    String::from_utf8_lossy(&stdout)
         .lines()
         .filter_map(parse_ps_line)
         .collect()
@@ -136,14 +132,10 @@ fn looks_like_claude_args(args: &str) -> bool {
 }
 
 fn get_cwd(pid: i32) -> Option<String> {
-    let output = std::process::Command::new("lsof")
-        .args(["-a", "-d", "cwd", "-p", &pid.to_string(), "-F", "n"])
-        .output()
-        .ok()?;
-    if !output.status.success() {
-        return None;
-    }
-    String::from_utf8_lossy(&output.stdout)
+    let mut cmd = std::process::Command::new("lsof");
+    cmd.args(["-a", "-d", "cwd", "-p", &pid.to_string(), "-F", "n"]);
+    let stdout = crate::proc::capture_stdout(cmd, std::time::Duration::from_secs(2))?;
+    String::from_utf8_lossy(&stdout)
         .lines()
         .find_map(|l| l.strip_prefix('n').map(|s| s.to_string()))
 }

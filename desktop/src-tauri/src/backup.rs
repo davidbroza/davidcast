@@ -19,8 +19,20 @@ use crate::store::Store;
 use serde::Serialize;
 use std::path::PathBuf;
 use std::process::{Command, Output};
+use std::time::Duration;
 
 const GIT_DIR_NAME: &str = ".backup-git";
+
+/// Network-facing git calls (push/pull/ls-remote) can stall on an unreachable
+/// remote. Bound them so a backup attempt can never wedge the caller. Local
+/// ops (add/commit/status) are left on the plain `.output()` path — they run
+/// against a tiny on-disk repo and don't block.
+const GIT_NET_TIMEOUT: Duration = Duration::from_secs(30);
+
+/// Run a network git command under a timeout, mapping failures to `what`.
+fn run_net(cmd: Command, what: &str) -> Result<Output, String> {
+    crate::proc::output_with_timeout(cmd, GIT_NET_TIMEOUT).map_err(|e| format!("{what}: {e}"))
+}
 
 #[derive(Serialize)]
 pub struct BackupStatus {
@@ -51,6 +63,10 @@ fn git() -> Result<Command, String> {
     let mut cmd = Command::new("git");
     cmd.arg("--git-dir").arg(git_dir()?);
     cmd.arg("--work-tree").arg(root()?);
+    // Never block waiting for a username/password on a terminal that doesn't
+    // exist — fail fast instead. Combined with the stdin=/dev/null and the
+    // 30s deadline in `run_net`, a push/pull can't hang the app forever.
+    cmd.env("GIT_TERMINAL_PROMPT", "0");
     Ok(cmd)
 }
 
@@ -115,10 +131,9 @@ pub fn init(remote: &str, branch: &str, include_analytics: bool) -> Result<(), S
 
     // Bail early if the remote already has something on this branch —
     // we'd rather fail loud than silently merge unrelated histories.
-    let out = git()?
-        .args(["ls-remote", "--heads", "origin", branch])
-        .output()
-        .map_err(|e| format!("git ls-remote: {e}"))?;
+    let mut cmd = git()?;
+    cmd.args(["ls-remote", "--heads", "origin", branch]);
+    let out = run_net(cmd, "git ls-remote")?;
     let remote_has_branch = ok(out, "git ls-remote")?
         .lines()
         .any(|l| !l.trim().is_empty());
@@ -154,10 +169,9 @@ pub fn init(remote: &str, branch: &str, include_analytics: bool) -> Result<(), S
         .map_err(|e| format!("git commit: {e}"))?;
     ok(out, "git commit")?;
 
-    let out = git()?
-        .args(["push", "-u", "origin", branch])
-        .output()
-        .map_err(|e| format!("git push: {e}"))?;
+    let mut cmd = git()?;
+    cmd.args(["push", "-u", "origin", branch]);
+    let out = run_net(cmd, "git push")?;
     ok(out, "git push")?;
 
     Ok(())
@@ -203,10 +217,9 @@ pub fn sync(branch: &str, include_analytics: bool) -> Result<(), String> {
         ok(out, "git commit")?;
     }
 
-    let out = git()?
-        .args(["pull", "--rebase", "origin", branch])
-        .output()
-        .map_err(|e| format!("git pull: {e}"))?;
+    let mut cmd = git()?;
+    cmd.args(["pull", "--rebase", "origin", branch]);
+    let out = run_net(cmd, "git pull")?;
     if !out.status.success() {
         // Don't leave the repo in a half-rebased state.
         let _ = git()?.args(["rebase", "--abort"]).output();
@@ -219,10 +232,9 @@ pub fn sync(branch: &str, include_analytics: bool) -> Result<(), String> {
         ));
     }
 
-    let out = git()?
-        .args(["push", "origin", branch])
-        .output()
-        .map_err(|e| format!("git push: {e}"))?;
+    let mut cmd = git()?;
+    cmd.args(["push", "origin", branch]);
+    let out = run_net(cmd, "git push")?;
     ok(out, "git push")?;
 
     Ok(())
@@ -232,10 +244,9 @@ pub fn pull(branch: &str) -> Result<(), String> {
     if !is_initialized() {
         return Err("Backup is not initialized.".into());
     }
-    let out = git()?
-        .args(["pull", "--rebase", "origin", branch])
-        .output()
-        .map_err(|e| format!("git pull: {e}"))?;
+    let mut cmd = git()?;
+    cmd.args(["pull", "--rebase", "origin", branch]);
+    let out = run_net(cmd, "git pull")?;
     if !out.status.success() {
         let _ = git()?.args(["rebase", "--abort"]).output();
         return Err(format!(
@@ -252,10 +263,9 @@ pub fn force_push(branch: &str) -> Result<(), String> {
     if !is_initialized() {
         return Err("Backup is not initialized.".into());
     }
-    let out = git()?
-        .args(["push", "--force-with-lease", "origin", branch])
-        .output()
-        .map_err(|e| format!("git push --force: {e}"))?;
+    let mut cmd = git()?;
+    cmd.args(["push", "--force-with-lease", "origin", branch]);
+    let out = run_net(cmd, "git push --force")?;
     ok(out, "git push --force-with-lease")?;
     Ok(())
 }

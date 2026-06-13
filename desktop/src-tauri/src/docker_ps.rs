@@ -13,17 +13,16 @@ pub struct DockerEntry {
 pub fn list_docker_containers() -> Vec<DockerEntry> {
     // `docker ps --format '{{json .}}'` emits one JSON object per line.
     // If `docker` isn't on PATH or the daemon is down we silently return [].
-    let Ok(output) = std::process::Command::new("docker")
-        .args(["ps", "--format", "{{json .}}"])
-        .output()
-    else {
+    // The timeout matters: `docker ps` hangs indefinitely when the daemon is
+    // starting, shutting down, or wedged — and this is on the palette-open
+    // path, so a bare blocking call would freeze the whole app.
+    let mut cmd = std::process::Command::new("docker");
+    cmd.args(["ps", "--format", "{{json .}}"]);
+    let Some(stdout) = crate::proc::capture_stdout(cmd, std::time::Duration::from_secs(3)) else {
         return Vec::new();
     };
-    if !output.status.success() {
-        return Vec::new();
-    }
     let mut out: Vec<DockerEntry> = Vec::new();
-    for line in String::from_utf8_lossy(&output.stdout).lines() {
+    for line in String::from_utf8_lossy(&stdout).lines() {
         let line = line.trim();
         if line.is_empty() {
             continue;

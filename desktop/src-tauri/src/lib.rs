@@ -13,6 +13,7 @@ mod hotkey;
 mod icons;
 #[cfg(target_os = "macos")]
 mod macos_perf;
+mod proc;
 mod recommend;
 mod skills;
 mod stats;

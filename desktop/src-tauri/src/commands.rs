@@ -307,7 +307,7 @@ fn now_ms() -> u64 {
 }
 
 #[tauri::command]
-pub fn backup_init(store: StoreState<'_>) -> Result<backup::BackupStatus, String> {
+pub async fn backup_init(store: StoreState<'_>) -> Result<backup::BackupStatus, String> {
     let s = store.read();
     let cfg = s.config.backup.clone();
     drop(s);
@@ -315,8 +315,10 @@ pub fn backup_init(store: StoreState<'_>) -> Result<backup::BackupStatus, String
     record_sync_outcome(&store, result)
 }
 
+// Async: git push/pull touch the network and can block. Off the main thread,
+// a stalled sync (bounded by the 30s git timeout) won't freeze the app.
 #[tauri::command]
-pub fn backup_sync(store: StoreState<'_>) -> Result<backup::BackupStatus, String> {
+pub async fn backup_sync(store: StoreState<'_>) -> Result<backup::BackupStatus, String> {
     let s = store.read();
     let cfg = s.config.backup.clone();
     drop(s);
@@ -325,7 +327,7 @@ pub fn backup_sync(store: StoreState<'_>) -> Result<backup::BackupStatus, String
 }
 
 #[tauri::command]
-pub fn backup_pull(store: StoreState<'_>) -> Result<backup::BackupStatus, String> {
+pub async fn backup_pull(store: StoreState<'_>) -> Result<backup::BackupStatus, String> {
     let s = store.read();
     let branch = s.config.backup.branch.clone();
     drop(s);
@@ -334,7 +336,7 @@ pub fn backup_pull(store: StoreState<'_>) -> Result<backup::BackupStatus, String
 }
 
 #[tauri::command]
-pub fn backup_force_push(
+pub async fn backup_force_push(
     store: StoreState<'_>,
 ) -> Result<backup::BackupStatus, String> {
     let s = store.read();
@@ -1031,8 +1033,13 @@ fn builtin_commands() -> Vec<CommandEntry> {
     commands
 }
 
+// Async so the main (UI) thread is never blocked while this runs. In Tauri 2
+// a synchronous command executes on the main thread — and this one fans out to
+// `docker ps` / `ps` / `lsof`, any of which can be slow. Marked async, it runs
+// on the async runtime instead, so a slow probe can stall this list (bounded by
+// the per-shell-out timeouts) without freezing the palette, hotkey, or tray.
 #[tauri::command]
-pub fn list_palette(store: StoreState<'_>) -> Result<Vec<PaletteEntry>, String> {
+pub async fn list_palette(store: StoreState<'_>) -> Result<Vec<PaletteEntry>, String> {
     let total_t0 = std::time::Instant::now();
     let s = store.read();
     let store_t0 = std::time::Instant::now();
@@ -1123,18 +1130,20 @@ pub fn list_palette(store: StoreState<'_>) -> Result<Vec<PaletteEntry>, String> 
     Ok(out)
 }
 
+// Async (see `list_palette`): these shell out to ps / lsof / docker, which can
+// hang. Running off the main thread keeps the UI + tray responsive.
 #[tauri::command]
-pub fn list_agents() -> Vec<AgentEntry> {
+pub async fn list_agents() -> Vec<AgentEntry> {
     agents::list_agents()
 }
 
 #[tauri::command]
-pub fn list_vite_ports() -> Vec<VitePortEntry> {
+pub async fn list_vite_ports() -> Vec<VitePortEntry> {
     vite_ports::list_vite_ports()
 }
 
 #[tauri::command]
-pub fn list_docker_containers() -> Vec<DockerEntry> {
+pub async fn list_docker_containers() -> Vec<DockerEntry> {
     docker_ps::list_docker_containers()
 }
 
