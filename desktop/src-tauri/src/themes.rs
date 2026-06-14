@@ -126,6 +126,7 @@ fn builtin() -> Vec<Theme> {
         pokemon_theme(),
         doom_theme(),
         gta_v_theme(),
+        the_boys_theme(),
     ]
 }
 
@@ -1056,6 +1057,41 @@ fn gta_v_theme() -> Theme {
             "badge-logs" => "#c9a85a",
             "shadow" => "0 28px 80px rgba(0, 0, 0, 0.7), 0 0 80px rgba(252, 209, 22, 0.18)",
             "font-family" => "Impact, \"Helvetica Neue\", \"Arial Black\", sans-serif",
+            "font-family-mono" => FONT_MONO,
+        },
+    }
+}
+
+fn the_boys_theme() -> Theme {
+    // "The Boys" — Homelander's suit on his worst day. Deep navy with a
+    // bottom red bloom evoking heat-vision afterimage; cream "stars" for
+    // the cape's stars; the laser-red accent ties into the fireLasers
+    // burst that plays when this theme is committed.
+    Theme {
+        id: "the-boys".into(),
+        name: "The Boys (Homelander)".into(),
+        builtin: true,
+        tokens: tokens! {
+            "bg" => "rgba(8, 16, 40, 0.95)",
+            "bg-solid" => "#081028",
+            "bg-image" => "radial-gradient(ellipse at 50% 110%, rgba(255, 40, 40, 0.30) 0%, rgba(255, 40, 40, 0.10) 25%, transparent 55%), linear-gradient(180deg, rgba(20, 36, 90, 0.4) 0%, transparent 40%)",
+            "bg-row" => "transparent",
+            "bg-row-active" => "rgba(255, 42, 42, 0.18)",
+            "fg" => "#f6f1e7",
+            "fg-dim" => "#b8c1d8",
+            "fg-faint" => "#6b7895",
+            "border" => "rgba(255, 42, 42, 0.28)",
+            "accent" => "#ff2a2a",
+            "danger" => "#ff2a2a",
+            "badge-snippet" => "#6aaaef",
+            "badge-quicklink" => "#f6f1e7",
+            "badge-clipboard" => "#ffb84a",
+            "badge-agent" => "#c8102e",
+            "badge-vite" => "#fcd116",
+            "badge-docker" => "#1b3b7b",
+            "badge-logs" => "#8a98b8",
+            "shadow" => "0 0 0 1px rgba(255, 42, 42, 0.35), 0 28px 80px rgba(0, 0, 0, 0.75), 0 0 60px rgba(255, 42, 42, 0.18)",
+            "font-family" => "\"Helvetica Neue\", \"Arial Black\", Impact, sans-serif",
             "font-family-mono" => FONT_MONO,
         },
     }

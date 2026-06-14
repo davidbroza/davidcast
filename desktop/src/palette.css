@@ -225,6 +225,32 @@ html[data-theme="lcars"] .kind-badge {
   will-change: transform, opacity;
 }
 
+/* Heat-vision layer — same overlay strategy as confetti. Beams start at
+ * width:0 and animate out to their target width, giving the "lance" feel
+ * instead of just fading in. */
+.laser-layer {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+  z-index: 9999;
+}
+.laser-beam {
+  position: absolute;
+  width: 0;
+  transform-origin: 0% 50%;
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.95) 0%,
+    #ff2a2a 12%,
+    #ff5050 60%,
+    rgba(255, 80, 80, 0) 100%
+  );
+  box-shadow: 0 0 6px #ff2a2a, 0 0 14px rgba(255, 80, 80, 0.6);
+  border-radius: 2px;
+  will-change: width, opacity;
+}
+
 .search input {
   width: 100%;
   background: transparent;

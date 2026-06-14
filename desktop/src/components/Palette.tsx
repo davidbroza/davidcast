@@ -34,6 +34,7 @@ import type { FileSearchOpts } from "../types";
 import { applyTheme } from "../App";
 import { evaluateMath } from "../calc";
 import { fireConfetti } from "../confetti";
+import { fireLasers } from "../lasers";
 import { r2, scheduleIdle } from "../utils";
 
 type KindFilter = PaletteEntry["kind"] | null;
@@ -953,7 +954,13 @@ export function Palette({
         // Tell the preview-mode cleanup not to revert: the user committed.
         themeCommittedRef.current = true;
         setToast(`Theme: ${t.name}`);
-        fireConfetti({ count: 40 });
+        // Themed burst — The Boys gets eye lasers, everything else gets
+        // the standard confetti high-five.
+        if (t.id === "the-boys") {
+          fireLasers({ count: 22 });
+        } else {
+          fireConfetti({ count: 40 });
+        }
         window.setTimeout(() => setToast(null), 800);
       } else if (isClipboard(entry)) {
         await api.executeClipboard(entry.id);

@@ -3,6 +3,7 @@ import { ask } from "@tauri-apps/plugin-dialog";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, type Settings } from "./api";
 import { fireConfetti } from "./confetti";
+import { fireLasers } from "./lasers";
 import type { Update } from "@tauri-apps/plugin-updater";
 import { r2, scheduleIdle } from "./utils";
 import { Analytics } from "./components/Analytics";
@@ -416,6 +417,9 @@ export default function App() {
         // is synchronous — dynamic imports added a frame's delay that
         // was masking the burst behind the palette dismiss in some flows.
         fireConfetti({ count: 200 });
+        break;
+      case "fx.lasers":
+        fireLasers({ count: 24 });
         break;
     }
   }

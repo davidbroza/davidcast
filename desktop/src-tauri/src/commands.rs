@@ -1003,6 +1003,12 @@ fn builtin_commands() -> Vec<CommandEntry> {
             keyword: None,
         },
         CommandEntry {
+            id: "fx.lasers".into(),
+            name: "👁️ Fire Eye Lasers".into(),
+            subtitle: "Homelander-style heat-vision burst — pairs with The Boys theme".into(),
+            keyword: None,
+        },
+        CommandEntry {
             id: "screenshots.copy_latest_path".into(),
             name: "Copy Latest Screenshot Path".into(),
             subtitle: "Newest file across your screenshot dirs — straight to the clipboard".into(),
