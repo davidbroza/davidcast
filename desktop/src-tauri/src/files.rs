@@ -73,15 +73,12 @@ pub fn default_roots() -> Vec<String> {
 pub fn default_screenshot_dirs() -> Vec<String> {
     let mut out: Vec<String> = Vec::new();
 
-    if let Ok(output) = std::process::Command::new("defaults")
-        .args(["read", "com.apple.screencapture", "location"])
-        .output()
-    {
-        if output.status.success() {
-            let s = String::from_utf8_lossy(&output.stdout).trim().to_string();
-            if !s.is_empty() {
-                out.push(expand_tilde(&s));
-            }
+    let mut cmd = std::process::Command::new("defaults");
+    cmd.args(["read", "com.apple.screencapture", "location"]);
+    if let Some(stdout) = crate::proc::capture_stdout(cmd, std::time::Duration::from_secs(3)) {
+        let s = String::from_utf8_lossy(&stdout).trim().to_string();
+        if !s.is_empty() {
+            out.push(expand_tilde(&s));
         }
     }
 
@@ -168,11 +165,10 @@ fn run_fd(pattern: &str, root: &str, extensions: &[String]) -> Option<String> {
     }
     cmd.arg(pattern);
     cmd.arg(root);
-    let output = cmd.output().ok()?;
-    if !output.status.success() {
-        return None;
-    }
-    Some(String::from_utf8_lossy(&output.stdout).into_owned())
+    // fd over a deep/large tree (or a stale network mount) can run long — cap
+    // it so a slow root can't stall the whole search.
+    let out = crate::proc::capture_stdout(cmd, std::time::Duration::from_secs(6))?;
+    Some(String::from_utf8_lossy(&out).into_owned())
 }
 
 fn decorate(p: &Path) -> Option<FileEntry> {
@@ -284,12 +280,10 @@ pub fn copy_image_to_clipboard(path: &str) -> Result<(), String> {
         p = escaped,
         c = class
     );
-    let status = std::process::Command::new("osascript")
-        .arg("-e")
-        .arg(&script)
-        .status()
-        .map_err(|e| format!("osascript spawn: {e}"))?;
-    if !status.success() {
+    let mut cmd = std::process::Command::new("osascript");
+    cmd.arg("-e").arg(&script);
+    let out = crate::proc::output_with_timeout(cmd, std::time::Duration::from_secs(8))?;
+    if !out.status.success() {
         return Err("osascript returned non-zero".into());
     }
     Ok(())

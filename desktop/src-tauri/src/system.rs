@@ -3,13 +3,17 @@
 //! by a frontend confirm step before they ever land here, but each call is
 //! still safe to fire on its own — we don't add extra "are you sure" prompts.
 
+use std::time::Duration;
+
+// osascript driving another app blocks on that app's Apple Event reply — an
+// unresponsive Finder/System Events would hang the child forever. Cap it.
+const OSASCRIPT_TIMEOUT: Duration = Duration::from_secs(8);
+
 fn osascript(script: &str) -> Result<(), String> {
-    let status = std::process::Command::new("osascript")
-        .arg("-e")
-        .arg(script)
-        .status()
-        .map_err(|e| format!("osascript spawn: {e}"))?;
-    if !status.success() {
+    let mut cmd = std::process::Command::new("osascript");
+    cmd.arg("-e").arg(script);
+    let out = crate::proc::output_with_timeout(cmd, OSASCRIPT_TIMEOUT)?;
+    if !out.status.success() {
         return Err("osascript returned non-zero".into());
     }
     Ok(())
@@ -27,11 +31,10 @@ pub fn lock_screen() -> Result<(), String> {
 /// Put the Mac to sleep immediately. `pmset sleepnow` is the canonical CLI
 /// equivalent of the Apple-menu Sleep item; no permission required.
 pub fn sleep_now() -> Result<(), String> {
-    let status = std::process::Command::new("pmset")
-        .arg("sleepnow")
-        .status()
-        .map_err(|e| format!("pmset spawn: {e}"))?;
-    if !status.success() {
+    let mut cmd = std::process::Command::new("pmset");
+    cmd.arg("sleepnow");
+    let out = crate::proc::output_with_timeout(cmd, OSASCRIPT_TIMEOUT)?;
+    if !out.status.success() {
         return Err("pmset returned non-zero".into());
     }
     Ok(())

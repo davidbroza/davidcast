@@ -6,6 +6,11 @@
 //! visible-desktop bounds (excludes menubar + dock) come from Finder's desktop
 //! window.
 
+use std::time::Duration;
+
+// osascript can block on an unresponsive target app's Apple Event reply.
+const WM_OSASCRIPT_TIMEOUT: Duration = Duration::from_secs(8);
+
 /// Position the frontmost (non-davidcast) window into a fraction of the
 /// visible desktop. Each `Half`/`Maximize` command boils down to a target
 /// rectangle.
@@ -45,11 +50,10 @@ pub fn center() -> Result<(), String> {
 fn visible_frame() -> Result<(i32, i32, i32, i32), String> {
     // `Finder`'s desktop window bounds = the visible-desktop rect (already
     // inset for the menubar and Dock). Returns "x1, y1, x2, y2".
-    let out = std::process::Command::new("osascript")
-        .arg("-e")
-        .arg("tell application \"Finder\" to get bounds of window of desktop")
-        .output()
-        .map_err(|e| format!("osascript spawn: {e}"))?;
+    let mut cmd = std::process::Command::new("osascript");
+    cmd.arg("-e")
+        .arg("tell application \"Finder\" to get bounds of window of desktop");
+    let out = crate::proc::output_with_timeout(cmd, WM_OSASCRIPT_TIMEOUT)?;
     if !out.status.success() {
         return Err("could not read screen bounds (Accessibility?)".into());
     }
@@ -84,12 +88,10 @@ end tell"#,
         w = w,
         h = h
     );
-    let status = std::process::Command::new("osascript")
-        .arg("-e")
-        .arg(&script)
-        .status()
-        .map_err(|e| format!("osascript spawn: {e}"))?;
-    if !status.success() {
+    let mut cmd = std::process::Command::new("osascript");
+    cmd.arg("-e").arg(&script);
+    let out = crate::proc::output_with_timeout(cmd, WM_OSASCRIPT_TIMEOUT)?;
+    if !out.status.success() {
         return Err("osascript returned non-zero".into());
     }
     Ok(())

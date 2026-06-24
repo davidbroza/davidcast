@@ -268,11 +268,12 @@ fn os_version() -> String {
 // ---------- helpers ----------
 
 fn run(cmd: &str, args: &[&str]) -> String {
-    Command::new(cmd)
-        .args(args)
-        .output()
-        .ok()
-        .and_then(|o| String::from_utf8(o.stdout).ok())
+    let mut c = Command::new(cmd);
+    c.args(args);
+    // The Stats view auto-refreshes every 2s; cap each probe so a wedged
+    // sysctl/vm_stat/df/pmset can't pile up and stall the refresh.
+    crate::proc::capture_stdout(c, std::time::Duration::from_secs(3))
+        .and_then(|o| String::from_utf8(o).ok())
         .unwrap_or_default()
 }
 

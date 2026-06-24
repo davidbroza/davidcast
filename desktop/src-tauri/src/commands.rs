@@ -168,13 +168,15 @@ pub fn set_github_repos(value: Vec<String>, store: StoreState<'_>) -> Result<(),
 // ---------- GitHub plugin ----------
 
 #[tauri::command]
-pub fn github_list_prs(store: StoreState<'_>) -> Result<Vec<crate::github::PullRequest>, String> {
+pub async fn github_list_prs(
+    store: StoreState<'_>,
+) -> Result<Vec<crate::github::PullRequest>, String> {
     let repos = store.read().config.github_repos.clone();
     crate::github::list_open_prs(&repos)
 }
 
 #[tauri::command]
-pub fn github_list_issues(
+pub async fn github_list_issues(
     query: Option<String>,
     store: StoreState<'_>,
 ) -> Result<Vec<crate::github::Issue>, String> {
@@ -184,14 +186,14 @@ pub fn github_list_issues(
 }
 
 #[tauri::command]
-pub fn github_list_assigned() -> Result<Vec<crate::github::Issue>, String> {
+pub async fn github_list_assigned() -> Result<Vec<crate::github::Issue>, String> {
     crate::github::list_issues_assigned_to_me()
 }
 
 /// Generic "open this URL in the default browser" command. Used by the
 /// GitHub plugin (and anything else that just needs `open <url>`).
 #[tauri::command]
-pub fn open_url(url: String) -> Result<(), String> {
+pub async fn open_url(url: String) -> Result<(), String> {
     crate::vite_ports::open_url(&url)
 }
 
@@ -267,13 +269,15 @@ pub fn set_backup_include_analytics(
 }
 
 #[tauri::command]
-pub fn backup_status(store: StoreState<'_>) -> backup::BackupStatus {
+pub async fn backup_status(store: StoreState<'_>) -> Result<backup::BackupStatus, String> {
     let s = store.read();
     let branch = s.config.backup.branch.clone();
     let last_ms = s.config.backup.last_synced_ms;
     let last_err = s.config.backup.last_error.clone();
     drop(s);
-    backup::status(&branch, last_ms, last_err)
+    // Async (with reference inputs) requires a Result return; status() never
+    // fails, so this is always Ok — the wrapper just runs it off the UI thread.
+    Ok(backup::status(&branch, last_ms, last_err))
 }
 
 fn record_sync_outcome(
@@ -387,7 +391,10 @@ pub fn set_screenshot_dirs(value: Vec<String>, store: StoreState<'_>) -> Result<
 }
 
 #[tauri::command]
-pub fn search_screenshots(limit: Option<usize>, store: StoreState<'_>) -> Vec<FileEntry> {
+pub async fn search_screenshots(
+    limit: Option<usize>,
+    store: StoreState<'_>,
+) -> Result<Vec<FileEntry>, String> {
     let s = store.read();
     let configured: Vec<String> = s.config.screenshot_dirs.clone();
     drop(s);
@@ -410,7 +417,7 @@ pub fn search_screenshots(limit: Option<usize>, store: StoreState<'_>) -> Vec<Fi
         }
     }
 
-    files::search(FileSearchOpts {
+    Ok(files::search(FileSearchOpts {
         query: None,
         extensions: vec![],
         // Includes PNG/JPG/HEIC + .mov/.mp4 screen recordings that
@@ -419,13 +426,13 @@ pub fn search_screenshots(limit: Option<usize>, store: StoreState<'_>) -> Vec<Fi
         roots,
         sort_by_mtime: true,
         limit: Some(limit.unwrap_or(50)),
-    })
+    }))
 }
 
 // ---------- File search ----------
 
 #[tauri::command]
-pub fn search_files(opts: FileSearchOpts) -> Vec<FileEntry> {
+pub async fn search_files(opts: FileSearchOpts) -> Vec<FileEntry> {
     files::search(opts)
 }
 
@@ -457,7 +464,7 @@ pub fn copy_file_path(path: String, app: AppHandle) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub fn copy_file_image(path: String, app: AppHandle) -> Result<(), String> {
+pub async fn copy_file_image(path: String, app: AppHandle) -> Result<(), String> {
     use tauri::Manager;
     if let Some(w) = app.get_webview_window("main") {
         let _ = w.hide();
@@ -466,7 +473,7 @@ pub fn copy_file_image(path: String, app: AppHandle) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub fn file_thumbnail(path: String) -> Option<String> {
+pub async fn file_thumbnail(path: String) -> Option<String> {
     files::thumbnail_data_url(&path)
 }
 
@@ -538,32 +545,32 @@ fn run_wm<F: FnOnce() -> Result<(), String>>(app: &AppHandle, op: F) -> Result<(
 }
 
 #[tauri::command]
-pub fn wm_left_half(app: AppHandle) -> Result<(), String> {
+pub async fn wm_left_half(app: AppHandle) -> Result<(), String> {
     run_wm(&app, window_mgmt::left_half)
 }
 
 #[tauri::command]
-pub fn wm_right_half(app: AppHandle) -> Result<(), String> {
+pub async fn wm_right_half(app: AppHandle) -> Result<(), String> {
     run_wm(&app, window_mgmt::right_half)
 }
 
 #[tauri::command]
-pub fn wm_top_half(app: AppHandle) -> Result<(), String> {
+pub async fn wm_top_half(app: AppHandle) -> Result<(), String> {
     run_wm(&app, window_mgmt::top_half)
 }
 
 #[tauri::command]
-pub fn wm_bottom_half(app: AppHandle) -> Result<(), String> {
+pub async fn wm_bottom_half(app: AppHandle) -> Result<(), String> {
     run_wm(&app, window_mgmt::bottom_half)
 }
 
 #[tauri::command]
-pub fn wm_maximize(app: AppHandle) -> Result<(), String> {
+pub async fn wm_maximize(app: AppHandle) -> Result<(), String> {
     run_wm(&app, window_mgmt::maximize)
 }
 
 #[tauri::command]
-pub fn wm_center(app: AppHandle) -> Result<(), String> {
+pub async fn wm_center(app: AppHandle) -> Result<(), String> {
     run_wm(&app, window_mgmt::center)
 }
 
@@ -587,39 +594,39 @@ fn run_system<F: FnOnce() -> Result<(), String>>(
 }
 
 #[tauri::command]
-pub fn system_lock_screen(app: AppHandle) -> Result<(), String> {
+pub async fn system_lock_screen(app: AppHandle) -> Result<(), String> {
     run_system(&app, system::lock_screen)
 }
 
 #[tauri::command]
-pub fn system_sleep(app: AppHandle) -> Result<(), String> {
+pub async fn system_sleep(app: AppHandle) -> Result<(), String> {
     run_system(&app, system::sleep_now)
 }
 
 #[tauri::command]
-pub fn system_empty_trash(app: AppHandle) -> Result<(), String> {
+pub async fn system_empty_trash(app: AppHandle) -> Result<(), String> {
     run_system(&app, system::empty_trash)
 }
 
 #[tauri::command]
-pub fn system_restart(app: AppHandle) -> Result<(), String> {
+pub async fn system_restart(app: AppHandle) -> Result<(), String> {
     run_system(&app, system::restart)
 }
 
 #[tauri::command]
-pub fn system_shut_down(app: AppHandle) -> Result<(), String> {
+pub async fn system_shut_down(app: AppHandle) -> Result<(), String> {
     run_system(&app, system::shut_down)
 }
 
 #[tauri::command]
-pub fn system_log_out(app: AppHandle) -> Result<(), String> {
+pub async fn system_log_out(app: AppHandle) -> Result<(), String> {
     run_system(&app, system::log_out)
 }
 
 // ---------- System stats ----------
 
 #[tauri::command]
-pub fn system_stats() -> Stats {
+pub async fn system_stats() -> Stats {
     stats::collect()
 }
 
@@ -1154,20 +1161,20 @@ pub async fn list_docker_containers() -> Vec<DockerEntry> {
 }
 
 #[tauri::command]
-pub fn execute_app(path: String, app: AppHandle) -> Result<(), String> {
+pub async fn execute_app(path: String, app: AppHandle) -> Result<(), String> {
     use tauri::Manager;
     if let Some(w) = app.get_webview_window("main") {
         let _ = w.hide();
     }
-    std::process::Command::new("open")
-        .arg(&path)
-        .status()
+    let mut cmd = std::process::Command::new("open");
+    cmd.arg(&path);
+    crate::proc::output_with_timeout(cmd, std::time::Duration::from_secs(5))
         .map_err(|e| format!("open {path} failed: {e}"))?;
     Ok(())
 }
 
 #[tauri::command]
-pub fn execute_agent(
+pub async fn execute_agent(
     pid: i32,
     tty: String,
     terminal_app: String,
@@ -1193,7 +1200,7 @@ pub fn execute_agent(
 }
 
 #[tauri::command]
-pub fn execute_vite(url: String, app: AppHandle) -> Result<(), String> {
+pub async fn execute_vite(url: String, app: AppHandle) -> Result<(), String> {
     use tauri::Manager;
     if let Some(w) = app.get_webview_window("main") {
         let _ = w.hide();
@@ -1202,7 +1209,7 @@ pub fn execute_vite(url: String, app: AppHandle) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub fn execute_docker_shell(id: String, app: AppHandle) -> Result<(), String> {
+pub async fn execute_docker_shell(id: String, app: AppHandle) -> Result<(), String> {
     use tauri::Manager;
     if let Some(w) = app.get_webview_window("main") {
         let _ = w.hide();
@@ -1212,7 +1219,7 @@ pub fn execute_docker_shell(id: String, app: AppHandle) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub fn execute_docker_logs(id: String, app: AppHandle) -> Result<(), String> {
+pub async fn execute_docker_logs(id: String, app: AppHandle) -> Result<(), String> {
     use tauri::Manager;
     if let Some(w) = app.get_webview_window("main") {
         let _ = w.hide();
@@ -1370,7 +1377,7 @@ pub fn delete_quicklink(id: String, store: StoreState<'_>) -> Result<(), String>
 // ---------- Execute ----------
 
 #[tauri::command]
-pub fn execute_snippet(
+pub async fn execute_snippet(
     id: String,
     app: AppHandle,
     store: StoreState<'_>,
@@ -1384,7 +1391,7 @@ pub fn execute_snippet(
 }
 
 #[tauri::command]
-pub fn execute_quicklink(
+pub async fn execute_quicklink(
     id: String,
     args: Option<HashMap<String, String>>,
     app: AppHandle,
@@ -1410,7 +1417,7 @@ pub fn hide_palette(app: AppHandle) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub fn hide_and_paste(app: AppHandle) -> Result<(), String> {
+pub async fn hide_and_paste(app: AppHandle) -> Result<(), String> {
     actions::hide_and_paste(&app);
     Ok(())
 }

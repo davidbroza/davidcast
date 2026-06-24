@@ -66,14 +66,15 @@ fn substitute_placeholders(template: &str, args: &HashMap<String, String>) -> St
 
 #[cfg(target_os = "macos")]
 fn paste_at_cursor() -> Result<(), String> {
-    let status = std::process::Command::new("osascript")
-        .args([
-            "-e",
-            r#"tell application "System Events" to keystroke "v" using command down"#,
-        ])
-        .status()
-        .map_err(|e| format!("osascript spawn failed: {e}"))?;
-    if !status.success() {
+    let mut cmd = std::process::Command::new("osascript");
+    cmd.args([
+        "-e",
+        r#"tell application "System Events" to keystroke "v" using command down"#,
+    ]);
+    // Snippet paste is the hottest action — a wedged System Events must not
+    // freeze it. Bounded so the worst case is a failed paste, not a hang.
+    let out = crate::proc::output_with_timeout(cmd, std::time::Duration::from_secs(5))?;
+    if !out.status.success() {
         return Err(
             "paste failed — grant Accessibility permission to davidcast in System Settings"
                 .into(),

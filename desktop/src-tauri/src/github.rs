@@ -12,6 +12,14 @@
 
 use serde::{Deserialize, Serialize};
 use std::process::Command;
+use std::time::Duration;
+
+/// `gh` makes network calls to the GitHub API — without a hard ceiling a slow
+/// or unreachable API (or an interactive auth prompt) hangs the child forever.
+/// The calling command is `async` so the wait is off the UI thread, but the
+/// timeout still matters so worker threads don't leak.
+const GH_NET_TIMEOUT: Duration = Duration::from_secs(8);
+const GH_VERSION_TIMEOUT: Duration = Duration::from_secs(2);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PullRequest {
@@ -38,18 +46,19 @@ pub struct Issue {
 }
 
 fn gh_available() -> bool {
-    Command::new("gh")
-        .arg("--version")
-        .output()
-        .map(|o| o.status.success())
-        .unwrap_or(false)
+    let mut cmd = Command::new("gh");
+    cmd.arg("--version");
+    crate::proc::capture_stdout(cmd, GH_VERSION_TIMEOUT).is_some()
 }
 
 fn run_gh(args: &[&str]) -> Result<String, String> {
-    let out = Command::new("gh")
-        .args(args)
-        .output()
-        .map_err(|e| format!("gh: {e}"))?;
+    let mut cmd = Command::new("gh");
+    cmd.args(args);
+    // GIT_TERMINAL_PROMPT=0 so a missing/expired credential fails fast instead
+    // of blocking on an interactive prompt that can never be answered.
+    cmd.env("GIT_TERMINAL_PROMPT", "0");
+    let out = crate::proc::output_with_timeout(cmd, GH_NET_TIMEOUT)
+        .map_err(|e| format!("gh {}: {e}", args.join(" ")))?;
     if !out.status.success() {
         let err = String::from_utf8_lossy(&out.stderr);
         return Err(format!("gh {}: {}", args.join(" "), err.trim()));
