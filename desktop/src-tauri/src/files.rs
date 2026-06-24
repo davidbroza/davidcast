@@ -237,17 +237,17 @@ fn expand_extensions(exts: &[String], category: Option<&str>) -> Vec<String> {
 // ---------- Per-row actions ----------
 
 pub fn open_in_default_app(path: &str) -> Result<(), String> {
-    std::process::Command::new("open")
-        .arg(path)
-        .status()
+    let mut cmd = std::process::Command::new("open");
+    cmd.arg(path);
+    crate::proc::output_with_timeout(cmd, std::time::Duration::from_secs(5))
         .map_err(|e| format!("open: {e}"))?;
     Ok(())
 }
 
 pub fn reveal_in_finder(path: &str) -> Result<(), String> {
-    std::process::Command::new("open")
-        .args(["-R", path])
-        .status()
+    let mut cmd = std::process::Command::new("open");
+    cmd.args(["-R", path]);
+    crate::proc::output_with_timeout(cmd, std::time::Duration::from_secs(5))
         .map_err(|e| format!("open -R: {e}"))?;
     Ok(())
 }
@@ -295,12 +295,16 @@ pub fn copy_path_to_clipboard(path: &str) -> Result<(), String> {
         .stdin(std::process::Stdio::piped())
         .spawn()
         .map_err(|e| format!("pbcopy spawn: {e}"))?;
-    if let Some(mut stdin) = child.stdin.take() {
-        stdin
-            .write_all(path.as_bytes())
-            .map_err(|e| format!("pbcopy write: {e}"))?;
-    }
+    // Write then drop stdin so pbcopy sees EOF. Stash any write error but
+    // still reap the child below — returning early here would leak a zombie.
+    let write_err = match child.stdin.take() {
+        Some(mut stdin) => stdin.write_all(path.as_bytes()).err(),
+        None => None,
+    };
     let status = child.wait().map_err(|e| format!("pbcopy wait: {e}"))?;
+    if let Some(e) = write_err {
+        return Err(format!("pbcopy write: {e}"));
+    }
     if !status.success() {
         return Err("pbcopy failed".into());
     }

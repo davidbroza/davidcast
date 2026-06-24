@@ -14,7 +14,20 @@ impl Store {
         std::fs::create_dir_all(&root)?;
         let config_path = root.join("config.json");
         let config = if config_path.exists() {
-            serde_json::from_str(&std::fs::read_to_string(&config_path)?)?
+            match serde_json::from_str(&std::fs::read_to_string(&config_path)?) {
+                Ok(c) => c,
+                Err(_) => {
+                    // A corrupt config.json (partial write after a crash, a bad
+                    // manual edit, or a conflicted backup merge) must NOT stop
+                    // the menu-bar app from launching. Preserve the bad file for
+                    // debugging and fall back to defaults so the app still opens.
+                    let _ = std::fs::rename(&config_path, root.join("config.json.corrupt"));
+                    let c = Config::default();
+                    Self::ensure_workspace_dir(&root, &c.active_workspace)?;
+                    write_json(&config_path, &c)?;
+                    c
+                }
+            }
         } else {
             let c = Config::default();
             Self::ensure_workspace_dir(&root, &c.active_workspace)?;

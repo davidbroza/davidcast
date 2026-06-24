@@ -272,20 +272,20 @@ end tell"#,
 fn fallback_open(app_name: &str) -> Result<(), String> {
     // Last resort: just activate the terminal app.
     let target = if app_name == "Unknown" { "Terminal" } else { app_name };
-    std::process::Command::new("open")
-        .args(["-a", target])
-        .status()
+    let mut cmd = std::process::Command::new("open");
+    cmd.args(["-a", target]);
+    crate::proc::output_with_timeout(cmd, std::time::Duration::from_secs(5))
         .map_err(|e| format!("open failed: {e}"))?;
     Ok(())
 }
 
 fn osascript(script: &str) -> Result<(), String> {
-    let status = std::process::Command::new("osascript")
-        .arg("-e")
-        .arg(script)
-        .status()
-        .map_err(|e| format!("osascript spawn: {e}"))?;
-    if !status.success() {
+    let mut cmd = std::process::Command::new("osascript");
+    cmd.arg("-e").arg(script);
+    // Drives another app (iTerm2/Terminal) via Apple Events — an unresponsive
+    // target would block the reply forever without a deadline.
+    let out = crate::proc::output_with_timeout(cmd, std::time::Duration::from_secs(8))?;
+    if !out.status.success() {
         return Err("osascript returned non-zero".into());
     }
     Ok(())

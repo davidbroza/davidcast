@@ -148,7 +148,9 @@ pub fn run() {
                     if !backup::is_initialized() {
                         continue;
                     }
-                    let interval_ms = (cfg.auto_interval_min as u64) * 60 * 1000;
+                    // Clamp to ≥1 min: a synced/edited config with 0 would make
+                    // the dirty-tree guard always true and push every 60s.
+                    let interval_ms = (cfg.auto_interval_min.max(1) as u64) * 60 * 1000;
                     let elapsed = std::time::SystemTime::now()
                         .duration_since(std::time::UNIX_EPOCH)
                         .ok()

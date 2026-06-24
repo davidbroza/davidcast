@@ -33,10 +33,13 @@ pub fn list_vite_ports() -> Vec<VitePortEntry> {
         // One git lookup per process — listeners on the same pid share it.
         let git_info = git::info_at(std::path::Path::new(&cwd));
         for l in listeners.iter().filter(|l| l.pid == p.pid) {
-            let host = if l.addr == "*" || l.addr == "0.0.0.0" || l.addr == "127.0.0.1" {
-                "localhost".to_string()
-            } else {
-                l.addr.clone()
+            let host = match l.addr.as_str() {
+                // v4 + v6 wildcard/loopback all dial as localhost; using "[::]"
+                // or "[::1]" literally in the URL would be wrong/unreachable.
+                "*" | "0.0.0.0" | "127.0.0.1" | "[::]" | "[::1]" | "::" | "::1" => {
+                    "localhost".to_string()
+                }
+                other => other.to_string(),
             };
             out.push(VitePortEntry {
                 pid: p.pid,
@@ -57,9 +60,9 @@ pub fn list_vite_ports() -> Vec<VitePortEntry> {
 }
 
 pub fn open_url(url: &str) -> Result<(), String> {
-    std::process::Command::new("open")
-        .arg(url)
-        .status()
+    let mut cmd = std::process::Command::new("open");
+    cmd.arg(url);
+    crate::proc::output_with_timeout(cmd, std::time::Duration::from_secs(5))
         .map_err(|e| format!("open {url}: {e}"))?;
     Ok(())
 }
@@ -166,10 +169,9 @@ fn collect_listeners() -> Vec<Listener> {
         } else if let Some(name) = line.strip_prefix('n') {
             let Some(pid) = current_pid else { continue };
             // `name` is like "*:5173" or "127.0.0.1:5173" or "[::1]:5173".
-            // Skip IPv6 records — lsof emits both v4 and v6 listeners; we pick v4.
-            if name.starts_with('[') {
-                continue;
-            }
+            // rsplit on the last ':' handles the bracketed IPv6 form too. The
+            // (pid,port) dedupe below collapses a server's v4+v6 pair, and a
+            // v6-only server (Node can bind `::` v6-only) still surfaces.
             let Some((addr, port)) = name.rsplit_once(':') else {
                 continue;
             };

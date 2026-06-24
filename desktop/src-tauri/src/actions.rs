@@ -104,7 +104,8 @@ fn open_url(url: &str, open_in: OpenIn) -> Result<(), String> {
                 cmd.args(["-a", "Safari", url]);
             }
         }
-        cmd.status().map_err(|e| format!("open failed: {e}"))?;
+        crate::proc::output_with_timeout(cmd, std::time::Duration::from_secs(5))
+            .map_err(|e| format!("open failed: {e}"))?;
         Ok(())
     }
     #[cfg(not(target_os = "macos"))]

@@ -660,6 +660,14 @@ export function Palette({
     });
   }, [filtered.length]);
 
+  // Entering/leaving a filter mode (e.g. picking "Show Clipboard" or "Search
+  // Snippets") swaps the whole list out via setKindFilter without firing the
+  // input onChange. Reset the highlight to the top so a reflexive Enter can't
+  // run a stale mid-list row from the previous list.
+  useEffect(() => {
+    setSelected(0);
+  }, [kindFilter]);
+
   useEffect(() => {
     inputRef.current?.focus();
   }, []);
@@ -1174,12 +1182,14 @@ export function Palette({
       return;
     }
 
-    if (cmd && e.key === "n") {
+    // Lowercase the key so these still fire with Caps Lock on (matches the
+    // ⌘C/⌘R handlers above, which already test both cases).
+    if (cmd && e.key.toLowerCase() === "n") {
       e.preventDefault();
       onCommand("create.snippet");
       return;
     }
-    if (cmd && e.key === "k") {
+    if (cmd && e.key.toLowerCase() === "k") {
       e.preventDefault();
       onCommand("switch.workspace");
       return;
@@ -1189,7 +1199,7 @@ export function Palette({
       onCommand("open.preferences");
       return;
     }
-    if (cmd && e.key === "e") {
+    if (cmd && e.key.toLowerCase() === "e") {
       e.preventDefault();
       const entry = filtered[selected];
       const item = entry && asItem(entry);

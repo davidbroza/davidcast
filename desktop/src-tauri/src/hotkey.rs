@@ -79,10 +79,11 @@ pub fn on_iterm_shortcut(_app: &AppHandle, _shortcut: &Shortcut, state: Shortcut
     // Direct launch — don't surface the palette. `open -a iTerm` uses
     // LaunchServices to resolve the bundle, so it works regardless of
     // install location.
-    let _ = std::process::Command::new("open")
-        .arg("-a")
-        .arg("iTerm")
-        .status();
+    let mut cmd = std::process::Command::new("open");
+    cmd.arg("-a").arg("iTerm");
+    // Bounded — `open -a` can stall if LaunchServices is busy or iTerm hangs
+    // mid-launch, and this runs on the global-shortcut dispatch thread.
+    let _ = crate::proc::output_with_timeout(cmd, std::time::Duration::from_secs(5));
 }
 
 pub fn toggle_palette(app: &AppHandle) {

@@ -2,7 +2,7 @@ use base64::{engine::general_purpose::STANDARD, Engine};
 use parking_lot::Mutex;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::Command;
 use std::sync::OnceLock;
 
 static MEM_CACHE: OnceLock<Mutex<HashMap<String, Option<String>>>> = OnceLock::new();
@@ -31,17 +31,16 @@ fn ensure_png(app_path: &str) -> Option<PathBuf> {
         return Some(cached);
     }
     let icns = find_icns(app_path)?;
-    let status = Command::new("sips")
-        .args(["-s", "format", "png"])
+    let mut cmd = Command::new("sips");
+    cmd.args(["-s", "format", "png"])
         .arg(&icns)
         .arg("--out")
         .arg(&cached)
-        .args(["-z", "64", "64"])
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status()
-        .ok()?;
-    if !status.success() || !cached.exists() {
+        .args(["-z", "64", "64"]);
+    // sips on a malformed/huge .icns can stall — bound it so the apps scan
+    // never wedges on one bad bundle.
+    let out = crate::proc::output_with_timeout(cmd, std::time::Duration::from_secs(5)).ok()?;
+    if !out.status.success() || !cached.exists() {
         return None;
     }
     Some(cached)
@@ -51,11 +50,9 @@ fn find_icns(app_path: &str) -> Option<PathBuf> {
     let info_plist = Path::new(app_path).join("Contents/Info.plist");
     let resources = Path::new(app_path).join("Contents/Resources");
 
-    if let Ok(out) = Command::new("/usr/libexec/PlistBuddy")
-        .args(["-c", "Print :CFBundleIconFile"])
-        .arg(&info_plist)
-        .output()
-    {
+    let mut pb = Command::new("/usr/libexec/PlistBuddy");
+    pb.args(["-c", "Print :CFBundleIconFile"]).arg(&info_plist);
+    if let Ok(out) = crate::proc::output_with_timeout(pb, std::time::Duration::from_secs(5)) {
         if out.status.success() {
             let raw = String::from_utf8_lossy(&out.stdout).trim().to_string();
             if !raw.is_empty() {

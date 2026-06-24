@@ -113,6 +113,8 @@ pub fn init(remote: &str, branch: &str, include_analytics: bool) -> Result<(), S
             .args(["init", "--initial-branch", branch, "--separate-git-dir"])
             .arg(git_dir()?)
             .arg(root()?)
+            // Match the `git()` helper — never block on a credential prompt.
+            .env("GIT_TERMINAL_PROMPT", "0")
             .output()
             .map_err(|e| format!("git init: {e}"))?;
         ok(out, "git init")?;

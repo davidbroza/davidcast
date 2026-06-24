@@ -103,12 +103,12 @@ end tell"#,
 }
 
 fn osascript(script: &str) -> Result<(), String> {
-    let status = std::process::Command::new("osascript")
-        .arg("-e")
-        .arg(script)
-        .status()
-        .map_err(|e| format!("osascript spawn: {e}"))?;
-    if !status.success() {
+    let mut cmd = std::process::Command::new("osascript");
+    cmd.arg("-e").arg(script);
+    // Drives Terminal/iTerm2 via Apple Events — bound it so a wedged terminal
+    // app can't hang the child forever.
+    let out = crate::proc::output_with_timeout(cmd, std::time::Duration::from_secs(8))?;
+    if !out.status.success() {
         return Err("osascript returned non-zero".into());
     }
     Ok(())
