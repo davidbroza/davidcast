@@ -11,8 +11,8 @@ use crate::skills::{self, SkillEntry};
 use crate::stats::{self, Stats};
 use crate::store::Store;
 use crate::system;
-use crate::types::*;
 use crate::themes::{self, Theme};
+use crate::types::*;
 use crate::vite_ports::{self, VitePortEntry};
 use crate::window_mgmt;
 use chrono::Utc;
@@ -102,10 +102,7 @@ pub fn set_check_updates_on_launch(value: bool, store: StoreState<'_>) -> Result
 // `recommender_state.json` next to the analytics log.
 
 #[tauri::command]
-pub fn set_enable_recommendations(
-    value: bool,
-    store: StoreState<'_>,
-) -> Result<(), String> {
+pub fn set_enable_recommendations(value: bool, store: StoreState<'_>) -> Result<(), String> {
     let mut s = store.write();
     s.config.enable_recommendations = value;
     s.save_config().map_err(|e| e.to_string())?;
@@ -198,10 +195,7 @@ pub async fn open_url(url: String) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub fn set_bg_image_override(
-    value: Option<String>,
-    store: StoreState<'_>,
-) -> Result<(), String> {
+pub fn set_bg_image_override(value: Option<String>, store: StoreState<'_>) -> Result<(), String> {
     let mut s = store.write();
     s.config.bg_image_override = value
         .as_ref()
@@ -259,10 +253,7 @@ pub fn set_backup_enabled(value: bool, store: StoreState<'_>) -> Result<(), Stri
 }
 
 #[tauri::command]
-pub fn set_backup_include_analytics(
-    value: bool,
-    store: StoreState<'_>,
-) -> Result<(), String> {
+pub fn set_backup_include_analytics(value: bool, store: StoreState<'_>) -> Result<(), String> {
     let mut s = store.write();
     s.config.backup.include_analytics = value;
     s.save_config().map_err(|e| e.to_string())
@@ -340,9 +331,7 @@ pub async fn backup_pull(store: StoreState<'_>) -> Result<backup::BackupStatus, 
 }
 
 #[tauri::command]
-pub async fn backup_force_push(
-    store: StoreState<'_>,
-) -> Result<backup::BackupStatus, String> {
+pub async fn backup_force_push(store: StoreState<'_>) -> Result<backup::BackupStatus, String> {
     let s = store.read();
     let branch = s.config.backup.branch.clone();
     drop(s);
@@ -506,6 +495,28 @@ pub fn get_active_theme(store: StoreState<'_>) -> Theme {
     })
 }
 
+/// Flip between Default (Dark) and Light. From any other theme, lands on Light.
+pub fn toggle_light_dark(store: &RwLock<Store>) -> Result<Theme, String> {
+    let next = {
+        let current = store.read().config.theme.clone();
+        themes::next_appearance_id(&current).to_string()
+    };
+    if themes::load(&next).is_none() {
+        return Err(format!("theme not found: {next}"));
+    }
+    {
+        let mut s = store.write();
+        s.config.theme = next.clone();
+        s.save_config().map_err(|e| e.to_string())?;
+    }
+    themes::load(&next).ok_or_else(|| "theme vanished mid-update".to_string())
+}
+
+#[tauri::command]
+pub fn toggle_light_dark_cmd(store: StoreState<'_>) -> Result<Theme, String> {
+    toggle_light_dark(store.inner())
+}
+
 #[tauri::command]
 pub fn set_active_theme(id: String, store: StoreState<'_>) -> Result<Theme, String> {
     if themes::load(&id).is_none() {
@@ -581,10 +592,7 @@ pub async fn wm_center(app: AppHandle) -> Result<(), String> {
 // shell-out. Destructive actions (restart/shutdown/logout/empty trash)
 // are gated by a frontend confirm step before they get here.
 
-fn run_system<F: FnOnce() -> Result<(), String>>(
-    app: &AppHandle,
-    op: F,
-) -> Result<(), String> {
+fn run_system<F: FnOnce() -> Result<(), String>>(app: &AppHandle, op: F) -> Result<(), String> {
     use tauri::Manager;
     if let Some(w) = app.get_webview_window("main") {
         let _ = w.hide();
@@ -703,7 +711,11 @@ pub fn create_workspace(
     if s.config.workspaces.iter().any(|w| w.id == id) {
         return Err(format!("workspace {id} already exists"));
     }
-    let ws = Workspace { id: id.clone(), name, color };
+    let ws = Workspace {
+        id: id.clone(),
+        name,
+        color,
+    };
     s.config.workspaces.push(ws.clone());
     Store::ensure_workspace_dir(&s.root, &id).map_err(|e| e.to_string())?;
     s.save_config().map_err(|e| e.to_string())?;
@@ -932,6 +944,12 @@ fn builtin_commands() -> Vec<CommandEntry> {
             keyword: None,
         },
         CommandEntry {
+            id: "theme.toggle".into(),
+            name: "Toggle Light / Dark".into(),
+            subtitle: "Flip between Light and Default (Dark) — ⌃⌥L".into(),
+            keyword: None,
+        },
+        CommandEntry {
             id: "system.lock".into(),
             name: "Lock Screen".into(),
             subtitle: "Lock the Mac (⌃⌘Q)".into(),
@@ -1065,36 +1083,35 @@ pub async fn list_palette(store: StoreState<'_>) -> Result<Vec<PaletteEntry>, St
     // independent — apps scans the filesystem, agents/vite/docker each
     // shell out to ps / lsof / docker. Sequential they were ~1s; in
     // parallel the total is bounded by the slowest single one.
-    let (apps_list, agent_list, vite_list, docker_list, breakdown) =
-        std::thread::scope(|scope| {
-            let apps_h = scope.spawn(|| {
-                let t = std::time::Instant::now();
-                let r = apps::list_apps();
-                (r, t.elapsed().as_millis())
-            });
-            let agents_h = scope.spawn(|| {
-                let t = std::time::Instant::now();
-                let r = agents::list_agents();
-                (r, t.elapsed().as_millis())
-            });
-            let vite_h = scope.spawn(|| {
-                let t = std::time::Instant::now();
-                let r = vite_ports::list_vite_ports();
-                (r, t.elapsed().as_millis())
-            });
-            let docker_h = scope.spawn(|| {
-                let t = std::time::Instant::now();
-                let r = docker_ps::list_docker_containers();
-                (r, t.elapsed().as_millis())
-            });
-            let (apps_r, apps_ms) = apps_h.join().unwrap();
-            let (agents_r, agents_ms) = agents_h.join().unwrap();
-            let (vite_r, vite_ms) = vite_h.join().unwrap();
-            let (docker_r, docker_ms) = docker_h.join().unwrap();
-            let breakdown =
-                format!("apps={apps_ms} agents={agents_ms} vite={vite_ms} docker={docker_ms}");
-            (apps_r, agents_r, vite_r, docker_r, breakdown)
+    let (apps_list, agent_list, vite_list, docker_list, breakdown) = std::thread::scope(|scope| {
+        let apps_h = scope.spawn(|| {
+            let t = std::time::Instant::now();
+            let r = apps::list_apps();
+            (r, t.elapsed().as_millis())
         });
+        let agents_h = scope.spawn(|| {
+            let t = std::time::Instant::now();
+            let r = agents::list_agents();
+            (r, t.elapsed().as_millis())
+        });
+        let vite_h = scope.spawn(|| {
+            let t = std::time::Instant::now();
+            let r = vite_ports::list_vite_ports();
+            (r, t.elapsed().as_millis())
+        });
+        let docker_h = scope.spawn(|| {
+            let t = std::time::Instant::now();
+            let r = docker_ps::list_docker_containers();
+            (r, t.elapsed().as_millis())
+        });
+        let (apps_r, apps_ms) = apps_h.join().unwrap();
+        let (agents_r, agents_ms) = agents_h.join().unwrap();
+        let (vite_r, vite_ms) = vite_h.join().unwrap();
+        let (docker_r, docker_ms) = docker_h.join().unwrap();
+        let breakdown =
+            format!("apps={apps_ms} agents={agents_ms} vite={vite_ms} docker={docker_ms}");
+        (apps_r, agents_r, vite_r, docker_r, breakdown)
+    });
 
     let mut out = Vec::with_capacity(
         builtin_commands().len()
@@ -1239,9 +1256,12 @@ pub struct NewSnippet {
     pub sensitive: bool,
 }
 
+// Async: the body is a full-file read + pretty rewrite + fsync. On the main
+// thread that freezes the tray for the duration of the disk call, and it
+// queues behind every other sync command (icon extraction included).
 #[tauri::command]
-pub fn create_snippet(input: NewSnippet, store: StoreState<'_>) -> Result<Snippet, String> {
-    let s = store.read();
+pub async fn create_snippet(input: NewSnippet, store: StoreState<'_>) -> Result<Snippet, String> {
+    let s = store.write();
     let mut items = s.load_snippets().map_err(|e| e.to_string())?;
     let ts = now();
     let item = Snippet {
@@ -1270,16 +1290,27 @@ pub struct UpdateSnippet {
 }
 
 #[tauri::command]
-pub fn update_snippet(input: UpdateSnippet, store: StoreState<'_>) -> Result<Snippet, String> {
-    let s = store.read();
+pub async fn update_snippet(
+    input: UpdateSnippet,
+    store: StoreState<'_>,
+) -> Result<Snippet, String> {
+    let s = store.write();
     let mut items = s.load_snippets().map_err(|e| e.to_string())?;
     let Some(it) = items.iter_mut().find(|x| x.id == input.id) else {
         return Err(format!("snippet {} not found", input.id));
     };
-    if let Some(n) = input.name { it.name = n; }
-    if let Some(t) = input.text { it.text = t; }
-    if let Some(k) = input.keyword { it.keyword = k.filter(|v| !v.trim().is_empty()); }
-    if let Some(b) = input.sensitive { it.sensitive = b; }
+    if let Some(n) = input.name {
+        it.name = n;
+    }
+    if let Some(t) = input.text {
+        it.text = t;
+    }
+    if let Some(k) = input.keyword {
+        it.keyword = k.filter(|v| !v.trim().is_empty());
+    }
+    if let Some(b) = input.sensitive {
+        it.sensitive = b;
+    }
     it.updated_at = now();
     it.rev += 1;
     let updated = it.clone();
@@ -1288,8 +1319,8 @@ pub fn update_snippet(input: UpdateSnippet, store: StoreState<'_>) -> Result<Sni
 }
 
 #[tauri::command]
-pub fn delete_snippet(id: String, store: StoreState<'_>) -> Result<(), String> {
-    let s = store.read();
+pub async fn delete_snippet(id: String, store: StoreState<'_>) -> Result<(), String> {
+    let s = store.write();
     let mut items = s.load_snippets().map_err(|e| e.to_string())?;
     let Some(it) = items.iter_mut().find(|x| x.id == id) else {
         return Err(format!("snippet {id} not found"));
@@ -1313,8 +1344,11 @@ pub struct NewQuicklink {
 }
 
 #[tauri::command]
-pub fn create_quicklink(input: NewQuicklink, store: StoreState<'_>) -> Result<Quicklink, String> {
-    let s = store.read();
+pub async fn create_quicklink(
+    input: NewQuicklink,
+    store: StoreState<'_>,
+) -> Result<Quicklink, String> {
+    let s = store.write();
     let mut items = s.load_quicklinks().map_err(|e| e.to_string())?;
     let ts = now();
     let item = Quicklink {
@@ -1343,16 +1377,27 @@ pub struct UpdateQuicklink {
 }
 
 #[tauri::command]
-pub fn update_quicklink(input: UpdateQuicklink, store: StoreState<'_>) -> Result<Quicklink, String> {
-    let s = store.read();
+pub async fn update_quicklink(
+    input: UpdateQuicklink,
+    store: StoreState<'_>,
+) -> Result<Quicklink, String> {
+    let s = store.write();
     let mut items = s.load_quicklinks().map_err(|e| e.to_string())?;
     let Some(it) = items.iter_mut().find(|x| x.id == input.id) else {
         return Err(format!("quicklink {} not found", input.id));
     };
-    if let Some(n) = input.name { it.name = n; }
-    if let Some(u) = input.url { it.url = u; }
-    if let Some(k) = input.keyword { it.keyword = k.filter(|v| !v.trim().is_empty()); }
-    if let Some(o) = input.open_in { it.open_in = o; }
+    if let Some(n) = input.name {
+        it.name = n;
+    }
+    if let Some(u) = input.url {
+        it.url = u;
+    }
+    if let Some(k) = input.keyword {
+        it.keyword = k.filter(|v| !v.trim().is_empty());
+    }
+    if let Some(o) = input.open_in {
+        it.open_in = o;
+    }
     it.updated_at = now();
     it.rev += 1;
     let updated = it.clone();
@@ -1361,8 +1406,8 @@ pub fn update_quicklink(input: UpdateQuicklink, store: StoreState<'_>) -> Result
 }
 
 #[tauri::command]
-pub fn delete_quicklink(id: String, store: StoreState<'_>) -> Result<(), String> {
-    let s = store.read();
+pub async fn delete_quicklink(id: String, store: StoreState<'_>) -> Result<(), String> {
+    let s = store.write();
     let mut items = s.load_quicklinks().map_err(|e| e.to_string())?;
     let Some(it) = items.iter_mut().find(|x| x.id == id) else {
         return Err(format!("quicklink {id} not found"));
@@ -1385,7 +1430,10 @@ pub async fn execute_snippet(
     let snippet = {
         let s = store.read();
         let items = s.load_snippets().map_err(|e| e.to_string())?;
-        items.into_iter().find(|x| x.id == id).ok_or_else(|| format!("snippet {id} not found"))?
+        items
+            .into_iter()
+            .find(|x| x.id == id)
+            .ok_or_else(|| format!("snippet {id} not found"))?
     };
     actions::execute_snippet(&app, &snippet)
 }
@@ -1400,7 +1448,10 @@ pub async fn execute_quicklink(
     let ql = {
         let s = store.read();
         let items = s.load_quicklinks().map_err(|e| e.to_string())?;
-        items.into_iter().find(|x| x.id == id).ok_or_else(|| format!("quicklink {id} not found"))?
+        items
+            .into_iter()
+            .find(|x| x.id == id)
+            .ok_or_else(|| format!("quicklink {id} not found"))?
     };
     actions::execute_quicklink(&app, &ql, &args.unwrap_or_default())
 }
@@ -1432,8 +1483,10 @@ pub struct RaycastStatus {
 
 #[tauri::command]
 pub fn detect_raycast() -> RaycastStatus {
-    for candidate in ["/Applications/Raycast.app", "/System/Applications/Raycast.app"]
-    {
+    for candidate in [
+        "/Applications/Raycast.app",
+        "/System/Applications/Raycast.app",
+    ] {
         if std::path::Path::new(candidate).exists() {
             return RaycastStatus {
                 installed: true,
@@ -1466,13 +1519,18 @@ pub struct ImportSummary {
 }
 
 #[tauri::command]
-pub fn import_from_file(path: String, store: StoreState<'_>) -> Result<ImportSummary, String> {
+pub async fn import_from_file(
+    path: String,
+    store: StoreState<'_>,
+) -> Result<ImportSummary, String> {
     let content = std::fs::read_to_string(&path).map_err(|e| format!("read {path}: {e}"))?;
     let parsed: serde_json::Value =
         serde_json::from_str(&content).map_err(|e| format!("invalid JSON: {e}"))?;
-    let entries = parsed.as_array().ok_or("expected a JSON array at the top level")?;
+    let entries = parsed
+        .as_array()
+        .ok_or("expected a JSON array at the top level")?;
 
-    let s = store.read();
+    let s = store.write();
     let mut snippets = s.load_snippets().map_err(|e| e.to_string())?;
     let mut quicklinks = s.load_quicklinks().map_err(|e| e.to_string())?;
 
@@ -1574,12 +1632,10 @@ fn normalize_raycast_url(url: &str) -> String {
             return out;
         };
         let tag = &tail[..end];
-        let name = tag
-            .find("name=\"")
-            .and_then(|i| {
-                let ns = &tag[i + 6..];
-                ns.find('"').map(|e| &ns[..e])
-            });
+        let name = tag.find("name=\"").and_then(|i| {
+            let ns = &tag[i + 6..];
+            ns.find('"').map(|e| &ns[..e])
+        });
         match name {
             Some(n) => {
                 out.push('{');

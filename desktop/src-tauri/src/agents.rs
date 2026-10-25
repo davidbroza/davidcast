@@ -48,9 +48,7 @@ pub fn list_agents() -> Vec<AgentEntry> {
         });
     }
     // Most recently started first.
-    out.sort_by(|a, b| {
-        etime_seconds(&a.elapsed).cmp(&etime_seconds(&b.elapsed))
-    });
+    out.sort_by(|a, b| etime_seconds(&a.elapsed).cmp(&etime_seconds(&b.elapsed)));
     out
 }
 
@@ -124,10 +122,7 @@ fn looks_like_claude_args(args: &str) -> bool {
         || args.contains("/bin/claude")
         || args.contains("/anthropic-ai/claude-code")
         || args.split_whitespace().next().map_or(false, |a| {
-            std::path::Path::new(a)
-                .file_name()
-                .and_then(|s| s.to_str())
-                == Some("claude")
+            std::path::Path::new(a).file_name().and_then(|s| s.to_str()) == Some("claude")
         })
 }
 
@@ -207,7 +202,11 @@ fn etime_seconds(etime: &str) -> u64 {
             m.parse::<u64>().unwrap_or(0),
             s.parse::<u64>().unwrap_or(0),
         ),
-        [m, s] => (0, m.parse::<u64>().unwrap_or(0), s.parse::<u64>().unwrap_or(0)),
+        [m, s] => (
+            0,
+            m.parse::<u64>().unwrap_or(0),
+            s.parse::<u64>().unwrap_or(0),
+        ),
         _ => (0, 0, 0),
     };
     days * 86_400 + h * 3_600 + m * 60 + s
@@ -271,7 +270,11 @@ end tell"#,
 
 fn fallback_open(app_name: &str) -> Result<(), String> {
     // Last resort: just activate the terminal app.
-    let target = if app_name == "Unknown" { "Terminal" } else { app_name };
+    let target = if app_name == "Unknown" {
+        "Terminal"
+    } else {
+        app_name
+    };
     let mut cmd = std::process::Command::new("open");
     cmd.args(["-a", target]);
     crate::proc::output_with_timeout(cmd, std::time::Duration::from_secs(5))
@@ -317,7 +320,10 @@ mod tests {
     #[test]
     fn classify_known_terminals() {
         assert_eq!(classify_terminal("iTerm2"), "iTerm2");
-        assert_eq!(classify_terminal("/Applications/iTerm.app/Contents/MacOS/iTerm2"), "iTerm2");
+        assert_eq!(
+            classify_terminal("/Applications/iTerm.app/Contents/MacOS/iTerm2"),
+            "iTerm2"
+        );
         assert_eq!(classify_terminal("Terminal"), "Terminal");
         assert_eq!(classify_terminal("ghostty"), "Ghostty");
         assert_eq!(classify_terminal("zsh"), "Unknown");
@@ -334,7 +340,10 @@ mod tests {
 
     #[test]
     fn is_claude_via_node() {
-        assert!(is_claude_cli("node", "/usr/local/bin/node /opt/claude/cli.js"));
+        assert!(is_claude_cli(
+            "node",
+            "/usr/local/bin/node /opt/claude/cli.js"
+        ));
     }
 
     #[test]

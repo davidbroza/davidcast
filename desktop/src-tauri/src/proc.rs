@@ -65,10 +65,7 @@ pub fn output_with_timeout(mut cmd: Command, timeout: Duration) -> Result<Output
                     let _ = child.wait();
                     let _ = out_reader.join();
                     let _ = err_reader.join();
-                    return Err(format!(
-                        "timed out after {}s",
-                        timeout.as_secs().max(1)
-                    ));
+                    return Err(format!("timed out after {}s", timeout.as_secs().max(1)));
                 }
                 std::thread::sleep(Duration::from_millis(20));
             }

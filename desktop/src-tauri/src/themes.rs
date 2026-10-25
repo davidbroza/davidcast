@@ -33,6 +33,16 @@ pub fn load(id: &str) -> Option<Theme> {
     list_all().into_iter().find(|t| t.id == id)
 }
 
+/// The two appearance modes the hotkey flips between. Light goes back to
+/// Default (Dark). Every other theme, including custom ones, goes to Light.
+pub fn next_appearance_id(current: &str) -> &'static str {
+    if current == "light" {
+        "default"
+    } else {
+        "light"
+    }
+}
+
 pub fn themes_dir() -> Option<std::path::PathBuf> {
     crate::store::Store::root_dir()
         .ok()
@@ -85,7 +95,13 @@ pub fn import_from_path(src: &str) -> Result<Theme, String> {
 
 fn sanitize_id(s: &str) -> String {
     s.chars()
-        .map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '_' { c } else { '-' })
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '-' || c == '_' {
+                c
+            } else {
+                '-'
+            }
+        })
         .collect()
 }
 
@@ -133,7 +149,8 @@ fn builtin() -> Vec<Theme> {
 // Font stacks. The bundled fonts (`Press Start 2P`, `VT323`,
 // `JetBrains Mono`) are loaded via @font-face in palette.css; they ship
 // with the .app, so themes can reference them without any user setup.
-const FONT_SYSTEM: &str = "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, sans-serif";
+const FONT_SYSTEM: &str =
+    "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, sans-serif";
 const FONT_MONO: &str = "ui-monospace, SFMono-Regular, Menlo, monospace";
 const FONT_PIXEL: &str = "\"Press Start 2P\", \"VT323\", Monaco, monospace";
 const FONT_TERMINAL: &str = "\"VT323\", Monaco, Menlo, monospace";
@@ -1162,7 +1179,14 @@ mod tests {
     fn list_all_includes_expected_builtin_ids() {
         let themes = list_all();
         let ids: Vec<&str> = themes.iter().map(|t| t.id.as_str()).collect();
-        for expected in ["default", "light", "high-contrast", "dracula", "nord", "tokyo-night"] {
+        for expected in [
+            "default",
+            "light",
+            "high-contrast",
+            "dracula",
+            "nord",
+            "tokyo-night",
+        ] {
             assert!(ids.contains(&expected), "missing builtin theme: {expected}");
         }
     }
@@ -1179,6 +1203,13 @@ mod tests {
     }
 
     #[test]
+    fn next_appearance_flips_between_light_and_default() {
+        assert_eq!(next_appearance_id("light"), "default");
+        assert_eq!(next_appearance_id("default"), "light");
+        assert_eq!(next_appearance_id("dracula"), "light");
+        assert_eq!(next_appearance_id("my-custom"), "light");
+    }
+
     fn load_default_returns_some() {
         let t = load("default");
         assert!(t.is_some());
@@ -1193,11 +1224,7 @@ mod tests {
     #[test]
     fn builtin_themes_have_nonempty_tokens() {
         for t in list_all() {
-            assert!(
-                !t.tokens.is_empty(),
-                "theme '{}' has no tokens",
-                t.id
-            );
+            assert!(!t.tokens.is_empty(), "theme '{}' has no tokens", t.id);
         }
     }
 

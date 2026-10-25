@@ -30,12 +30,7 @@ pub fn list_docker_containers() -> Vec<DockerEntry> {
         let Ok(v) = serde_json::from_str::<serde_json::Value>(line) else {
             continue;
         };
-        let s = |k: &str| {
-            v.get(k)
-                .and_then(|x| x.as_str())
-                .unwrap_or("")
-                .to_string()
-        };
+        let s = |k: &str| v.get(k).and_then(|x| x.as_str()).unwrap_or("").to_string();
         out.push(DockerEntry {
             id: s("ID"),
             name: s("Names"),

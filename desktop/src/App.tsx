@@ -14,7 +14,14 @@ import { Preferences } from "./components/Preferences";
 import { Stats } from "./components/Stats";
 import { UpdateBanner } from "./components/UpdateBanner";
 import { WorkspaceSwitcher } from "./components/WorkspaceSwitcher";
-import { stableEntryKey, type Item, type PaletteEntry, type Theme, type Workspace } from "./types";
+import {
+  stableEntryKey,
+  type Item,
+  type ItemChange,
+  type PaletteEntry,
+  type Theme,
+  type Workspace,
+} from "./types";
 
 const ENTRIES_CACHE_KEY = "davidcast.entries.cache.v1";
 
@@ -27,6 +34,27 @@ function entriesFingerprint(list: PaletteEntry[]): string {
   const parts: string[] = [String(list.length)];
   for (const e of list) parts.push(stableEntryKey(e));
   return parts.join("|");
+}
+
+function applyItemChange(list: PaletteEntry[], change: ItemChange): PaletteEntry[] {
+  if (change.op === "delete") {
+    return list.filter(
+      (e) =>
+        !(
+          (e.kind === "snippet" || e.kind === "quicklink") &&
+          e.id === change.id
+        ),
+    );
+  }
+  const item = change.item;
+  const idx = list.findIndex(
+    (e) =>
+      (e.kind === "snippet" || e.kind === "quicklink") && e.id === item.id,
+  );
+  if (idx === -1) return [...list, item];
+  const next = list.slice();
+  next[idx] = item;
+  return next;
 }
 
 function loadCachedEntries(): PaletteEntry[] {
@@ -153,6 +181,14 @@ export default function App() {
   // Initialized from the hydrated cache so an unchanged refresh after
   // launch is also a no-op.
   const entriesFingerprintRef = useRef<string>(entriesFingerprint(loadCachedEntries()));
+  // Mirrors `entries` so a save can patch the list synchronously, before
+  // React re-renders, and a second save in the same turn sees the first.
+  const entriesRef = useRef(entries);
+  entriesRef.current = entries;
+  // Bumped at the start of every refresh. A save that lands while a scan
+  // is in flight starts a new one; the older result is dropped so it can't
+  // put back the pre-save list.
+  const refreshGen = useRef(0);
 
   // Tracks the most recent refresh outcome so the open-perf event can
   // include whether refresh changed anything (cache hit vs miss).
@@ -160,18 +196,21 @@ export default function App() {
   const lastRefreshMsRef = useRef<number>(0);
 
   const refresh = useCallback(async () => {
+    const gen = ++refreshGen.current;
     const t0 = performance.now();
     const [ws, list, s] = await Promise.all([
       api.listWorkspaces(),
       api.listPalette(),
       api.getSettings(),
     ]);
+    if (gen !== refreshGen.current) return;
     setWorkspaces(ws.workspaces);
     setActiveWorkspace(ws.active);
     const fp = entriesFingerprint(list);
     const changed = fp !== entriesFingerprintRef.current;
     if (changed) {
       entriesFingerprintRef.current = fp;
+      entriesRef.current = list;
       setEntries(list);
       // Persist so next launch hydrates with the same data and the very
       // first open feels instant. Stringify is bounded (a few hundred KB
@@ -301,6 +340,11 @@ export default function App() {
       setInitialFilter(null);
       refresh().catch((e) => setError(String(e)));
     });
+    // ⌃⌥L flips Light / Default (Dark) in Rust and emits the new theme.
+    // Apply it here so a hidden palette picks it up before the next open.
+    const offTheme = listen<Theme>("theme:changed", (event) => {
+      applyTheme(event.payload);
+    });
     // Stamp the moment the window loses focus so the *next* open can
     // report idle_ms_since_last_use. Cheap; just a timestamp.
     const onBlurStamp = () => {
@@ -311,6 +355,7 @@ export default function App() {
       offShow.then((fn) => fn());
       offClipboard.then((fn) => fn());
       offPrefs.then((fn) => fn());
+      offTheme.then((fn) => fn());
       window.removeEventListener("blur", onBlurStamp);
     };
   }, [refresh, measureOpen]);
@@ -325,6 +370,24 @@ export default function App() {
   const backToPalette = () => {
     setInitialFilter(null);
     setView({ kind: "palette" });
+  };
+
+  // The write has already hit disk. Show the row and leave the form now.
+  // `refresh` still runs so agents, docker, and apps catch up. That scan
+  // shells out (median ~200ms here, multi-second when `git status` wedges)
+  // and used to hold the form open for the whole wait.
+  const commitItemChange = (change: ItemChange) => {
+    const next = applyItemChange(entriesRef.current, change);
+    entriesRef.current = next;
+    entriesFingerprintRef.current = entriesFingerprint(next);
+    setEntries(next);
+    try {
+      localStorage.setItem(ENTRIES_CACHE_KEY, JSON.stringify(next));
+    } catch {
+      /* quota — ignore */
+    }
+    backToPalette();
+    refresh().catch((e) => setError(String(e)));
   };
 
   async function onCommand(id: string) {
@@ -450,10 +513,7 @@ export default function App() {
       {view.kind === "create" && (
         <ItemForm
           presetKind={view.presetKind}
-          onDone={async () => {
-            await refresh();
-            backToPalette();
-          }}
+          onDone={commitItemChange}
           onCancel={backToPalette}
           onError={setError}
         />
@@ -461,10 +521,7 @@ export default function App() {
       {view.kind === "edit" && (
         <ItemForm
           initial={view.item}
-          onDone={async () => {
-            await refresh();
-            backToPalette();
-          }}
+          onDone={commitItemChange}
           onCancel={backToPalette}
           onError={setError}
         />
@@ -479,7 +536,7 @@ export default function App() {
           initialFilter={initialFilter}
           onEdit={(item) => setView({ kind: "edit", item })}
           onCommand={onCommand}
-          refresh={refresh}
+          onItemChange={commitItemChange}
           onError={setError}
         />
       )}
@@ -494,7 +551,7 @@ export default function App() {
             initialFilter={initialFilter}
             onEdit={(item) => setView({ kind: "edit", item })}
             onCommand={onCommand}
-            refresh={refresh}
+            onItemChange={commitItemChange}
             onError={setError}
           />
           <WorkspaceSwitcher

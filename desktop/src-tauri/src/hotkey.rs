@@ -19,10 +19,7 @@ static LAST_HOTKEY_MS: AtomicU64 = AtomicU64::new(0);
 const HOTKEY_BLUR_GRACE_MS: u64 = 250;
 
 fn now_ms() -> u64 {
-    APP_START
-        .get_or_init(Instant::now)
-        .elapsed()
-        .as_millis() as u64
+    APP_START.get_or_init(Instant::now).elapsed().as_millis() as u64
 }
 
 /// Returns true if the most recent hotkey press is recent enough that
@@ -43,6 +40,11 @@ pub fn default_shortcut() -> Shortcut {
 
 pub fn clipboard_shortcut() -> Shortcut {
     Shortcut::new(Some(Modifiers::SUPER | Modifiers::SHIFT), Code::KeyV)
+}
+
+pub fn appearance_shortcut() -> Shortcut {
+    // ⌃⌥L — flip Default (Dark) and Light without opening the palette.
+    Shortcut::new(Some(Modifiers::CONTROL | Modifiers::ALT), Code::KeyL)
 }
 
 pub fn iterm_shortcut() -> Shortcut {
@@ -69,6 +71,20 @@ pub fn on_clipboard_shortcut(app: &AppHandle, _shortcut: &Shortcut, state: Short
     }
     LAST_HOTKEY_MS.store(now_ms(), Ordering::SeqCst);
     open_clipboard(app);
+}
+
+pub fn on_appearance_shortcut(app: &AppHandle, _shortcut: &Shortcut, state: ShortcutState) {
+    if state != ShortcutState::Pressed {
+        return;
+    }
+    LAST_HOTKEY_MS.store(now_ms(), Ordering::SeqCst);
+    let store = app.state::<parking_lot::RwLock<crate::store::Store>>();
+    match crate::commands::toggle_light_dark(store.inner()) {
+        Ok(theme) => {
+            let _ = app.emit("theme:changed", theme);
+        }
+        Err(e) => eprintln!("toggle light/dark: {e}"),
+    }
 }
 
 pub fn on_iterm_shortcut(_app: &AppHandle, _shortcut: &Shortcut, state: ShortcutState) {

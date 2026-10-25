@@ -108,8 +108,8 @@ fn fetch_prs_for(repo: &str) -> Result<Vec<PullRequest>, String> {
         "--json",
         "number,title,author,url,createdAt,labels,isDraft",
     ])?;
-    let parsed: Vec<GhPrJson> = serde_json::from_str(&raw)
-        .map_err(|e| format!("parse {repo} prs: {e}"))?;
+    let parsed: Vec<GhPrJson> =
+        serde_json::from_str(&raw).map_err(|e| format!("parse {repo} prs: {e}"))?;
     Ok(parsed
         .into_iter()
         .map(|p| PullRequest {
@@ -199,8 +199,8 @@ fn fetch_issues_for(repo: &str, query: Option<&str>) -> Result<Vec<Issue>, Strin
     }
     let arg_refs: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
     let raw = run_gh(&arg_refs)?;
-    let parsed: Vec<GhIssueJson> = serde_json::from_str(&raw)
-        .map_err(|e| format!("parse {repo} issues: {e}"))?;
+    let parsed: Vec<GhIssueJson> =
+        serde_json::from_str(&raw).map_err(|e| format!("parse {repo} issues: {e}"))?;
     Ok(parsed
         .into_iter()
         .map(|i| Issue {
@@ -263,10 +263,7 @@ pub fn list_issues_assigned_to_me() -> Result<Vec<Issue>, String> {
     let mut all: Vec<Issue> = parsed
         .into_iter()
         .map(|i| Issue {
-            repo: i
-                .repository
-                .map(|r| r.name_with_owner)
-                .unwrap_or_default(),
+            repo: i.repository.map(|r| r.name_with_owner).unwrap_or_default(),
             number: i.number,
             title: i.title,
             author: i.author.map(|u| u.login).unwrap_or_default(),

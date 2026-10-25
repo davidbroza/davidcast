@@ -179,7 +179,9 @@ fn battery() -> (Option<u32>, Option<String>, Option<String>) {
         None => return (None, None, None),
     };
     let percent = line.split('\t').nth(1).and_then(|s| {
-        s.split('%').next().and_then(|p| p.trim().parse::<u32>().ok())
+        s.split('%')
+            .next()
+            .and_then(|p| p.trim().parse::<u32>().ok())
     });
     let parts: Vec<&str> = line.split(';').collect();
     let state = parts
@@ -190,9 +192,7 @@ fn battery() -> (Option<u32>, Option<String>, Option<String>) {
     let time = parts.get(2).and_then(|s| {
         let s = s.trim();
         if s.contains("remaining") {
-            Some(
-                s.split("present").next().unwrap_or(s).trim().to_string(),
-            )
+            Some(s.split("present").next().unwrap_or(s).trim().to_string())
         } else if s.contains("not charging") || s.contains("charged") {
             None
         } else {

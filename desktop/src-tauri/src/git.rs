@@ -10,6 +10,12 @@
 
 use serde::Serialize;
 use std::path::Path;
+use std::time::Duration;
+
+/// `git status` on a locked index or a huge tree can sit for tens of seconds.
+/// `list_palette` calls this once per agent and Vite row, so one wedged repo
+/// stalls the whole list. A missing branch badge is the fallback.
+const GIT_STATUS_TIMEOUT: Duration = Duration::from_millis(1000);
 
 #[derive(Debug, Clone, Default, Serialize)]
 pub struct GitInfo {
@@ -31,24 +37,20 @@ pub fn info_at(path: &Path) -> GitInfo {
     if p.is_empty() {
         return GitInfo::default();
     }
-    let Ok(out) = std::process::Command::new("git")
-        .args([
-            "-C",
-            p,
-            "-c",
-            "color.ui=never",
-            "status",
-            "-b",
-            "--porcelain=v2",
-        ])
-        .output()
-    else {
+    let mut cmd = std::process::Command::new("git");
+    cmd.args([
+        "-C",
+        p,
+        "-c",
+        "color.ui=never",
+        "status",
+        "-b",
+        "--porcelain=v2",
+    ]);
+    let Some(stdout) = crate::proc::capture_stdout(cmd, GIT_STATUS_TIMEOUT) else {
         return GitInfo::default();
     };
-    if !out.status.success() {
-        return GitInfo::default();
-    }
-    parse_porcelain_v2(&String::from_utf8_lossy(&out.stdout))
+    parse_porcelain_v2(&String::from_utf8_lossy(&stdout))
 }
 
 fn parse_porcelain_v2(stdout: &str) -> GitInfo {

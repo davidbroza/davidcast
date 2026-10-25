@@ -1,13 +1,13 @@
 import { readText } from "@tauri-apps/plugin-clipboard-manager";
 import { useEffect, useRef, useState } from "react";
 import { api } from "../api";
-import type { Item, OpenIn } from "../types";
+import type { Item, ItemChange, OpenIn } from "../types";
 import { isQuicklink, isSnippet } from "../types";
 
 type Props = {
   initial?: Item;
   presetKind?: "snippet" | "quicklink";
-  onDone: () => void;
+  onDone: (change: ItemChange) => void;
   onCancel: () => void;
   onError: (msg: string) => void;
 };
@@ -81,15 +81,17 @@ export function ItemForm({ initial, presetKind, onDone, onCancel, onError }: Pro
           return;
         }
         if (editing && initial && isSnippet(initial)) {
-          await api.updateSnippet({
+          const saved = await api.updateSnippet({
             id: initial.id,
             name,
             text,
             keyword: kw ?? null,
             sensitive,
           });
+          onDone({ op: "upsert", item: { kind: "snippet", ...saved } });
         } else {
-          await api.createSnippet({ name, text, keyword: kw, sensitive });
+          const saved = await api.createSnippet({ name, text, keyword: kw, sensitive });
+          onDone({ op: "upsert", item: { kind: "snippet", ...saved } });
         }
       } else {
         if (!url.trim()) {
@@ -98,23 +100,24 @@ export function ItemForm({ initial, presetKind, onDone, onCancel, onError }: Pro
           return;
         }
         if (editing && initial && isQuicklink(initial)) {
-          await api.updateQuicklink({
+          const saved = await api.updateQuicklink({
             id: initial.id,
             name,
             url,
             keyword: kw ?? null,
             open_in: openIn,
           });
+          onDone({ op: "upsert", item: { kind: "quicklink", ...saved } });
         } else {
-          await api.createQuicklink({
+          const saved = await api.createQuicklink({
             name,
             url,
             keyword: kw,
             open_in: openIn,
           });
+          onDone({ op: "upsert", item: { kind: "quicklink", ...saved } });
         }
       }
-      onDone();
     } catch (e) {
       onError(String(e));
     } finally {
@@ -137,7 +140,7 @@ export function ItemForm({ initial, presetKind, onDone, onCancel, onError }: Pro
     try {
       if (isSnippet(initial)) await api.deleteSnippet(initial.id);
       else if (isQuicklink(initial)) await api.deleteQuicklink(initial.id);
-      onDone();
+      onDone({ op: "delete", id: initial.id });
     } catch (e) {
       onError(String(e));
     }

@@ -59,10 +59,7 @@ pub fn list_skills() -> Vec<SkillEntry> {
                 continue;
             };
             for plugin in plugins.flatten() {
-                let plugin_name = plugin
-                    .file_name()
-                    .to_string_lossy()
-                    .into_owned();
+                let plugin_name = plugin.file_name().to_string_lossy().into_owned();
                 let Ok(versions) = fs::read_dir(plugin.path()) else {
                     continue;
                 };
@@ -177,12 +174,7 @@ fn parse_frontmatter(content: &str) -> (Option<String>, Option<String>) {
     (name, description)
 }
 
-fn set(
-    name: &mut Option<String>,
-    description: &mut Option<String>,
-    key: &str,
-    value: &str,
-) {
+fn set(name: &mut Option<String>, description: &mut Option<String>, key: &str, value: &str) {
     let v = value.trim().to_string();
     if v.is_empty() {
         return;
@@ -298,6 +290,9 @@ mod tests {
         // A description that wraps across multiple indented lines.
         let s = "---\nname: x\ndescription: this is\n  a folded description\n  across lines\n---\n";
         let (_, d) = parse_frontmatter(s);
-        assert_eq!(d.as_deref(), Some("this is a folded description across lines"));
+        assert_eq!(
+            d.as_deref(),
+            Some("this is a folded description across lines")
+        );
     }
 }

@@ -90,11 +90,7 @@ fn flush_batch(events: &[AnalyticsEvent]) {
     }
 }
 
-pub fn record(
-    session_id: String,
-    kind: String,
-    data: serde_json::Value,
-) -> Result<(), String> {
+pub fn record(session_id: String, kind: String, data: serde_json::Value) -> Result<(), String> {
     let event = AnalyticsEvent {
         ts: now_ms(),
         session_id,

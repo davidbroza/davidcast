@@ -52,7 +52,9 @@ impl Store {
     }
 
     pub fn workspace_dir(&self) -> PathBuf {
-        self.root.join("workspaces").join(&self.config.active_workspace)
+        self.root
+            .join("workspaces")
+            .join(&self.config.active_workspace)
     }
 
     pub fn save_config(&self) -> Result<(), StoreError> {
@@ -114,7 +116,7 @@ pub enum StoreError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::{Snippet, Quicklink, OpenIn};
+    use crate::types::{OpenIn, Quicklink, Snippet};
 
     fn stub_snippet(id: &str) -> Snippet {
         Snippet {

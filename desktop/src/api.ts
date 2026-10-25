@@ -254,6 +254,8 @@ export const api = {
   getActiveTheme: () => invoke<import("./types").Theme>("get_active_theme"),
   setActiveTheme: (id: string) =>
     invoke<import("./types").Theme>("set_active_theme", { id }),
+  toggleLightDark: () =>
+    invoke<import("./types").Theme>("toggle_light_dark_cmd"),
   importTheme: (path: string) =>
     invoke<import("./types").Theme>("import_theme", { path }),
   themesDir: () => invoke<string | null>("themes_dir"),

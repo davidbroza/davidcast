@@ -16,7 +16,9 @@
 #![cfg(target_os = "macos")]
 
 use objc2::rc::Retained;
-use objc2::runtime::{AnyClass, AnyObject, Bool, ClassBuilder, NSObjectProtocol, ProtocolObject, Sel};
+use objc2::runtime::{
+    AnyClass, AnyObject, Bool, ClassBuilder, NSObjectProtocol, ProtocolObject, Sel,
+};
 use objc2::sel;
 use objc2_app_kit::{
     NSApplication, NSScreenSaverWindowLevel, NSWindow, NSWindowAnimationBehavior,
@@ -209,6 +211,8 @@ pub fn opt_out_of_app_nap() -> bool {
     let options = NSActivityOptions::UserInitiatedAllowingIdleSystemSleep
         | NSActivityOptions::LatencyCritical;
     let activity = info.beginActivityWithOptions_reason(options, &reason);
-    let _ = APP_NAP_ACTIVITY.set(ActivityHandle { _activity: activity });
+    let _ = APP_NAP_ACTIVITY.set(ActivityHandle {
+        _activity: activity,
+    });
     true
 }

@@ -131,6 +131,13 @@ export type Item =
   | ({ kind: "snippet" } & Snippet)
   | ({ kind: "quicklink" } & Quicklink);
 
+/// A snippet/quicklink mutation the form or the palette already persisted.
+/// The palette list is patched locally so the row updates before the next
+/// full `list_palette` scan comes back.
+export type ItemChange =
+  | { op: "upsert"; item: Item }
+  | { op: "delete"; id: string };
+
 export interface CalcEntry {
   id: string;
   expr: string;

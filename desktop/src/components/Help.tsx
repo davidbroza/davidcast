@@ -143,6 +143,12 @@ const GROUPS: Group[] = [
         command: "themes.switch",
         description: "Built-in themes plus any JSON dropped in ~/.../davidcast/themes.",
       },
+      {
+        name: "Toggle Light / Dark",
+        command: "theme.toggle",
+        shortcut: <><kbd>⌃</kbd>+<kbd>⌥</kbd>+<kbd>L</kbd></>,
+        description: "Global hotkey. Flips between Light and Default (Dark). From any other theme, the first press lands on Light.",
+      },
     ],
   },
   {

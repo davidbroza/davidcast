@@ -76,8 +76,7 @@ fn paste_at_cursor() -> Result<(), String> {
     let out = crate::proc::output_with_timeout(cmd, std::time::Duration::from_secs(5))?;
     if !out.status.success() {
         return Err(
-            "paste failed — grant Accessibility permission to davidcast in System Settings"
-                .into(),
+            "paste failed — grant Accessibility permission to davidcast in System Settings".into(),
         );
     }
     Ok(())
@@ -133,10 +132,7 @@ mod tests {
     #[test]
     fn placeholders_missing_key_leaves_literal() {
         let args = HashMap::new();
-        assert_eq!(
-            substitute_placeholders("hi {name}", &args),
-            "hi {name}"
-        );
+        assert_eq!(substitute_placeholders("hi {name}", &args), "hi {name}");
     }
 
     #[test]

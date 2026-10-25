@@ -359,4 +359,3 @@ mod tests {
         assert!(b.last_error.is_none());
     }
 }
-

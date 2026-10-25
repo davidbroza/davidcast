@@ -11,7 +11,7 @@ import {
 } from "react";
 import { api, type Settings } from "../api";
 import type { Session } from "../App";
-import type { Item, PaletteEntry, Workspace } from "../types";
+import type { Item, ItemChange, PaletteEntry, Workspace } from "../types";
 import {
   asItem,
   extractPlaceholders,
@@ -175,7 +175,7 @@ type Props = {
   initialFilter?: KindFilter;
   onEdit: (item: Item) => void;
   onCommand: (id: string) => void;
-  refresh: () => Promise<void>;
+  onItemChange: (change: ItemChange) => void;
   onError: (msg: string) => void;
 };
 
@@ -188,7 +188,7 @@ export function Palette({
   initialFilter,
   onEdit,
   onCommand,
-  refresh,
+  onItemChange,
   onError,
 }: Props) {
   const [query, setQuery] = useState("");
@@ -835,6 +835,14 @@ export function Palette({
             setQuery("");
             setKindFilter("theme");
             break;
+          case "theme.toggle": {
+            outcome = "executed";
+            const t = await api.toggleLightDark();
+            applyTheme(t);
+            setToast(t.id === "light" ? "Light" : "Dark");
+            window.setTimeout(() => setToast(null), 800);
+            break;
+          }
           case "files.screenshots":
             // Dedicated mode: scans the user-configured screenshot dirs
             // (default ~/Desktop), shows a side preview, and copies the
@@ -1232,7 +1240,7 @@ export function Palette({
       try {
         if (item.kind === "snippet") await api.deleteSnippet(item.id);
         else await api.deleteQuicklink(item.id);
-        await refresh();
+        onItemChange({ op: "delete", id: item.id });
       } catch (e) {
         onError(String(e));
       }

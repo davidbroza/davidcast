@@ -97,7 +97,11 @@ const N_TOD_BUCKETS: usize = 4;
 fn dow_bucket(dt: &DateTime<Utc>) -> usize {
     // 0..=4 (Mon..Fri) -> weekday; 5..=6 -> weekend.
     let wd = dt.weekday().num_days_from_monday();
-    if wd < 5 { 0 } else { 1 }
+    if wd < 5 {
+        0
+    } else {
+        1
+    }
 }
 const N_DOW_BUCKETS: usize = 2;
 
@@ -219,21 +223,23 @@ fn featurize(
     // baseline.
     let tod = tod_bucket(now_dt);
     let tot_tod: u32 = stats.tod_counts.iter().sum();
-    let p_tod =
-        (stats.tod_counts[tod] as f32 + SMOOTH_ALPHA)
-            / (tot_tod as f32 + SMOOTH_ALPHA * N_TOD_BUCKETS as f32);
+    let p_tod = (stats.tod_counts[tod] as f32 + SMOOTH_ALPHA)
+        / (tot_tod as f32 + SMOOTH_ALPHA * N_TOD_BUCKETS as f32);
     f[3] = p_tod.ln() - (1.0 / N_TOD_BUCKETS as f32).ln();
 
     // Day-of-week affinity, same shape.
     let dow = dow_bucket(now_dt);
     let tot_dow: u32 = stats.dow_counts.iter().sum();
-    let p_dow =
-        (stats.dow_counts[dow] as f32 + SMOOTH_ALPHA)
-            / (tot_dow as f32 + SMOOTH_ALPHA * N_DOW_BUCKETS as f32);
+    let p_dow = (stats.dow_counts[dow] as f32 + SMOOTH_ALPHA)
+        / (tot_dow as f32 + SMOOTH_ALPHA * N_DOW_BUCKETS as f32);
     f[4] = p_dow.ln() - (1.0 / N_DOW_BUCKETS as f32).ln();
 
     // Same-session bonus.
-    f[5] = if dt_ms > 0 && (dt_ms as u128) <= SESSION_WINDOW_MS { 1.0 } else { 0.0 };
+    f[5] = if dt_ms > 0 && (dt_ms as u128) <= SESSION_WINDOW_MS {
+        1.0
+    } else {
+        0.0
+    };
 
     // Kind prior: how popular is this *kind* of thing in general?
     f[6] = (1.0 + kind_total as f32).ln();
@@ -283,9 +289,19 @@ pub fn train_from_jsonl(content: &str) -> Result<RecommenderState, String> {
     // even if the file (rare) was concatenated out of order from a backup.
     let mut events: Vec<(u128, String, String, serde_json::Value)> = Vec::new();
     for line in content.lines() {
-        let Ok(ev) = serde_json::from_str::<serde_json::Value>(line) else { continue };
-        let ts = ev.get("ts").and_then(|v| v.as_u64()).map(|t| t as u128).unwrap_or(0);
-        let kind = ev.get("kind").and_then(|v| v.as_str()).unwrap_or("").to_string();
+        let Ok(ev) = serde_json::from_str::<serde_json::Value>(line) else {
+            continue;
+        };
+        let ts = ev
+            .get("ts")
+            .and_then(|v| v.as_u64())
+            .map(|t| t as u128)
+            .unwrap_or(0);
+        let kind = ev
+            .get("kind")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
         if kind != "execute" {
             continue;
         }
@@ -339,8 +355,8 @@ pub fn train_from_jsonl(content: &str) -> Result<RecommenderState, String> {
     //      morning, all-Slack evening — without shuffling the last
     //      cluster pulls the weights toward itself).
     type Snapshot = (
-        [f32; N_FEATURES],         // positive
-        Vec<[f32; N_FEATURES]>,    // negatives, including a synthetic zero
+        [f32; N_FEATURES],      // positive
+        Vec<[f32; N_FEATURES]>, // negatives, including a synthetic zero
     );
     let mut snapshots: Vec<Snapshot> = Vec::with_capacity(events.len());
     let mut seen_keys: Vec<ItemKey> = Vec::new();
@@ -353,8 +369,7 @@ pub fn train_from_jsonl(content: &str) -> Result<RecommenderState, String> {
 
     for (ts, key, kind, _data) in &events {
         let now_ms = *ts;
-        let now_dt = match DateTime::<Utc>::from_timestamp((now_ms / 1000) as i64, 0)
-        {
+        let now_dt = match DateTime::<Utc>::from_timestamp((now_ms / 1000) as i64, 0) {
             Some(d) => d,
             None => continue,
         };
@@ -383,14 +398,8 @@ pub fn train_from_jsonl(content: &str) -> Result<RecommenderState, String> {
                     Some(s) => s.clone(),
                     None => continue,
                 };
-                let neg_kind_total =
-                    *state.kind_counts.get(&neg_stats.kind).unwrap_or(&0);
-                negatives.push(featurize(
-                    &neg_stats,
-                    neg_kind_total,
-                    now_ms,
-                    &now_dt,
-                ));
+                let neg_kind_total = *state.kind_counts.get(&neg_stats.kind).unwrap_or(&0);
+                negatives.push(featurize(&neg_stats, neg_kind_total, now_ms, &now_dt));
             }
         }
         snapshots.push((pos_features, negatives));
@@ -442,26 +451,18 @@ fn pairwise_sgd_update(
     }
 }
 
-fn update_item_stats(
-    state: &mut RecommenderState,
-    key: &str,
-    kind: &str,
-    ts_ms: u128,
-) {
+fn update_item_stats(state: &mut RecommenderState, key: &str, kind: &str, ts_ms: u128) {
     let dt = match DateTime::<Utc>::from_timestamp((ts_ms / 1000) as i64, 0) {
         Some(d) => d,
         None => return,
     };
     let tod = tod_bucket(&dt);
     let dow = dow_bucket(&dt);
-    let entry = state
-        .items
-        .entry(key.to_string())
-        .or_insert_with(|| {
-            let mut s = ItemStats::default();
-            s.kind = kind.to_string();
-            s
-        });
+    let entry = state.items.entry(key.to_string()).or_insert_with(|| {
+        let mut s = ItemStats::default();
+        s.kind = kind.to_string();
+        s
+    });
     entry.exec_count = entry.exec_count.saturating_add(1);
     entry.last_used_ms = ts_ms;
     entry.tod_counts[tod] = entry.tod_counts[tod].saturating_add(1);
@@ -574,8 +575,8 @@ pub struct TopItem {
 pub fn status(state: &RecommenderState) -> RecommenderStatus {
     let trained = state.train_examples >= MIN_TRAIN_EVENTS;
     let now_ms = now_ms();
-    let now_dt = DateTime::<Utc>::from_timestamp((now_ms / 1000) as i64, 0)
-        .unwrap_or_else(Utc::now);
+    let now_dt =
+        DateTime::<Utc>::from_timestamp((now_ms / 1000) as i64, 0).unwrap_or_else(Utc::now);
 
     let mut top: Vec<TopItem> = state
         .items
@@ -593,7 +594,11 @@ pub fn status(state: &RecommenderState) -> RecommenderStatus {
             }
         })
         .collect();
-    top.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+    top.sort_by(|a, b| {
+        b.score
+            .partial_cmp(&a.score)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
     top.truncate(10);
 
     RecommenderStatus {
@@ -699,8 +704,14 @@ mod tests {
         let s = train_from_jsonl(&synthetic_log()).unwrap();
         assert!(s.train_examples >= MIN_TRAIN_EVENTS);
         let inputs = vec![
-            ScoreInput { key: "app:iTerm".into(), kind: "app".into() },
-            ScoreInput { key: "app:Slack".into(), kind: "app".into() },
+            ScoreInput {
+                key: "app:iTerm".into(),
+                kind: "app".into(),
+            },
+            ScoreInput {
+                key: "app:Slack".into(),
+                kind: "app".into(),
+            },
         ];
         let scores = score_items_at(&s, &inputs, TEST_NOW_MS);
         let iterm = scores.iter().find(|x| x.key == "app:iTerm").unwrap();
@@ -722,8 +733,14 @@ mod tests {
         let s = train_from_jsonl(&synthetic_log()).unwrap();
         let evening = 1_777_161_600_000 + 19 * 3_600_000 + 30 * 60_000;
         let inputs = vec![
-            ScoreInput { key: "app:iTerm".into(), kind: "app".into() },
-            ScoreInput { key: "app:Slack".into(), kind: "app".into() },
+            ScoreInput {
+                key: "app:iTerm".into(),
+                kind: "app".into(),
+            },
+            ScoreInput {
+                key: "app:Slack".into(),
+                kind: "app".into(),
+            },
         ];
         let scores = score_items_at(&s, &inputs, evening);
         let iterm = scores.iter().find(|x| x.key == "app:iTerm").unwrap();
@@ -740,8 +757,14 @@ mod tests {
     fn item_with_no_history_scores_lower_than_frequent_item() {
         let s = train_from_jsonl(&synthetic_log()).unwrap();
         let inputs = vec![
-            ScoreInput { key: "app:iTerm".into(), kind: "app".into() },
-            ScoreInput { key: "app:NeverSeen".into(), kind: "app".into() },
+            ScoreInput {
+                key: "app:iTerm".into(),
+                kind: "app".into(),
+            },
+            ScoreInput {
+                key: "app:NeverSeen".into(),
+                kind: "app".into(),
+            },
         ];
         let scores = score_items_at(&s, &inputs, TEST_NOW_MS);
         let known = scores.iter().find(|x| x.key == "app:iTerm").unwrap();
@@ -767,24 +790,45 @@ mod tests {
         let year = 365u128 * 24 * 3600 * 1000;
         state.items.insert(
             "app:Fresh".into(),
-            ItemStats { exec_count: 5, last_used_ms: now, kind: "app".into(), ..Default::default() },
+            ItemStats {
+                exec_count: 5,
+                last_used_ms: now,
+                kind: "app".into(),
+                ..Default::default()
+            },
         );
         state.items.insert(
             "app:Stale".into(),
-            ItemStats { exec_count: 5, last_used_ms: now.saturating_sub(year), kind: "app".into(), ..Default::default() },
+            ItemStats {
+                exec_count: 5,
+                last_used_ms: now.saturating_sub(year),
+                kind: "app".into(),
+                ..Default::default()
+            },
         );
-        let scores = score_items(&state, &[
-            ScoreInput { key: "app:Fresh".into(), kind: "app".into() },
-            ScoreInput { key: "app:Stale".into(), kind: "app".into() },
-        ]);
+        let scores = score_items(
+            &state,
+            &[
+                ScoreInput {
+                    key: "app:Fresh".into(),
+                    kind: "app".into(),
+                },
+                ScoreInput {
+                    key: "app:Stale".into(),
+                    kind: "app".into(),
+                },
+            ],
+        );
         assert!(scores[0].score > scores[1].score);
     }
 
     #[test]
     fn weights_change_after_training() {
         let s = train_from_jsonl(&synthetic_log()).unwrap();
-        assert_ne!(s.weights, [0.0; N_FEATURES],
-            "training should have moved at least one weight off zero");
+        assert_ne!(
+            s.weights, [0.0; N_FEATURES],
+            "training should have moved at least one weight off zero"
+        );
         // Frequency weight (index 1) should be positive — items used more
         // often beat items used less often.
         assert!(
@@ -830,10 +874,12 @@ mod tests {
         // counts must still accumulate so the empty-query bias works.
         let day_ms: u128 = 1_777_161_600_000;
         let events: Vec<serde_json::Value> = (0..3)
-            .map(|i| json!({
-                "ts": day_ms + i as u128, "session_id": "s", "kind": "execute",
-                "data": {"kind": "app", "name": "iTerm", "success": true}
-            }))
+            .map(|i| {
+                json!({
+                    "ts": day_ms + i as u128, "session_id": "s", "kind": "execute",
+                    "data": {"kind": "app", "name": "iTerm", "success": true}
+                })
+            })
             .collect();
         let jsonl = events
             .iter()
@@ -843,8 +889,10 @@ mod tests {
         let s = train_from_jsonl(&jsonl).unwrap();
         assert_eq!(s.train_examples, 3);
         assert_eq!(s.items.get("app:iTerm").unwrap().exec_count, 3);
-        assert_eq!(s.weights, [0.0; N_FEATURES],
-            "should not have trained weights below MIN_TRAIN_EVENTS");
+        assert_eq!(
+            s.weights, [0.0; N_FEATURES],
+            "should not have trained weights below MIN_TRAIN_EVENTS"
+        );
     }
 
     // ---------- End-to-end demo ----------
@@ -887,8 +935,11 @@ mod tests {
             for slot in 0..9 {
                 let t = base + 7 * 3600 * 1000 + slot * 20 * 60 * 1000;
                 if weekend {
-                    if slot % 3 == 0 { ev(&mut lines, t, "app", "Chrome"); }
-                    else { ev(&mut lines, t, "app", "Spotify"); }
+                    if slot % 3 == 0 {
+                        ev(&mut lines, t, "app", "Chrome");
+                    } else {
+                        ev(&mut lines, t, "app", "Spotify");
+                    }
                 } else {
                     match slot % 3 {
                         0 => ev(&mut lines, t, "app", "iTerm"),
@@ -917,8 +968,18 @@ mod tests {
                 }
             }
             // Two random misclicks per day to add noise.
-            ev(&mut lines, base + 9 * 3600 * 1000 + 100, "snippet", "stripe-key");
-            ev(&mut lines, base + 14 * 3600 * 1000 + 100, "snippet", "stripe-key");
+            ev(
+                &mut lines,
+                base + 9 * 3600 * 1000 + 100,
+                "snippet",
+                "stripe-key",
+            );
+            ev(
+                &mut lines,
+                base + 14 * 3600 * 1000 + 100,
+                "snippet",
+                "stripe-key",
+            );
         }
         lines.join("\n")
     }
@@ -949,8 +1010,13 @@ mod tests {
 
         println!("Learned weights (positive = pushes score up):");
         let names = [
-            "bias", "frequency", "recency", "time_of_day", "day_of_week",
-            "same_session", "kind_prior",
+            "bias",
+            "frequency",
+            "recency",
+            "time_of_day",
+            "day_of_week",
+            "same_session",
+            "kind_prior",
         ];
         for (i, name) in names.iter().enumerate() {
             println!("  {:<14} {:>+8.3}", name, state.weights[i]);
@@ -958,11 +1024,8 @@ mod tests {
         println!();
 
         // Sample exec counts so we know what was actually used vs noise.
-        let mut by_count: Vec<(&String, u32)> = state
-            .items
-            .iter()
-            .map(|(k, v)| (k, v.exec_count))
-            .collect();
+        let mut by_count: Vec<(&String, u32)> =
+            state.items.iter().map(|(k, v)| (k, v.exec_count)).collect();
         by_count.sort_by(|a, b| b.1.cmp(&a.1));
         println!("Items by raw execute count:");
         for (k, n) in by_count.iter().take(8) {
@@ -976,7 +1039,10 @@ mod tests {
         let inputs: Vec<ScoreInput> = state
             .items
             .iter()
-            .map(|(k, v)| ScoreInput { key: k.clone(), kind: v.kind.clone() })
+            .map(|(k, v)| ScoreInput {
+                key: k.clone(),
+                kind: v.kind.clone(),
+            })
             .collect();
         let mut inputs_sorted = inputs.clone();
         inputs_sorted.sort_by(|a, b| a.key.cmp(&b.key));
@@ -1016,7 +1082,10 @@ mod tests {
             }
             // Where would the noise items land?
             if let Some(noise) = scored.iter().find(|s| s.key == "snippet:stripe-key") {
-                let rank = scored.iter().position(|s| s.key == noise.key).unwrap_or(usize::MAX);
+                let rank = scored
+                    .iter()
+                    .position(|s| s.key == noise.key)
+                    .unwrap_or(usize::MAX);
                 println!(
                     "  ... noise check: snippet:stripe-key at rank {} ({:.1}%)",
                     rank + 1,
@@ -1030,7 +1099,9 @@ mod tests {
     }
 
     #[inline]
-    fn day_ms() -> u128 { 24 * 3600 * 1000 }
+    fn day_ms() -> u128 {
+        24 * 3600 * 1000
+    }
 
     /// Pre-train against the user's REAL analytics log on disk and
     /// write `recommender_state.json` next to it. Used once when
@@ -1044,8 +1115,7 @@ mod tests {
     #[test]
     #[ignore]
     fn pretrain_against_real_log() {
-        let state = train_from_log()
-            .expect("train_from_log against real analytics.jsonl");
+        let state = train_from_log().expect("train_from_log against real analytics.jsonl");
         save_state(&state).expect("save state");
         let st = status(&state);
         println!();

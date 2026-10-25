@@ -80,11 +80,12 @@ pub fn run() {
             let store = store::Store::load().expect("failed to load davidcast store");
             app.manage(RwLock::new(store));
 
-            // Register global hotkeys: palette + clipboard + iTerm.
+            // Register global hotkeys: palette + clipboard + iTerm + light/dark.
             let handle = app.handle().clone();
             let palette_sc = hotkey::default_shortcut();
             let clipboard_sc = hotkey::clipboard_shortcut();
             let iterm_sc = hotkey::iterm_shortcut();
+            let appearance_sc = hotkey::appearance_shortcut();
             app.global_shortcut().on_shortcut(palette_sc, {
                 let handle = handle.clone();
                 move |_app, sc, event| {
@@ -101,6 +102,12 @@ pub fn run() {
                 let handle = handle.clone();
                 move |_app, sc, event| {
                     hotkey::on_iterm_shortcut(&handle, sc, event.state);
+                }
+            })?;
+            app.global_shortcut().on_shortcut(appearance_sc, {
+                let handle = handle.clone();
+                move |_app, sc, event| {
+                    hotkey::on_appearance_shortcut(&handle, sc, event.state);
                 }
             })?;
 
@@ -163,11 +170,8 @@ pub fn run() {
                             continue;
                         }
                     }
-                    let s_now = backup::status(
-                        &cfg.branch,
-                        cfg.last_synced_ms,
-                        cfg.last_error.clone(),
-                    );
+                    let s_now =
+                        backup::status(&cfg.branch, cfg.last_synced_ms, cfg.last_error.clone());
                     if s_now.dirty_count == 0 {
                         continue;
                     }
@@ -211,9 +215,7 @@ pub fn run() {
                 const RETRAIN_MIN_NEW_EVENTS: usize = 30;
                 loop {
                     std::thread::sleep(Duration::from_secs(RETRAIN_TICK_SECS));
-                    let store = match recommend_handle
-                        .try_state::<RwLock<store::Store>>()
-                    {
+                    let store = match recommend_handle.try_state::<RwLock<store::Store>>() {
                         Some(s) => s,
                         None => continue,
                     };
@@ -243,15 +245,14 @@ pub fn run() {
             });
 
             // Build the menu-bar tray.
-            let show_i = MenuItem::with_id(app, "show", "Open davidcast", true, Some("Ctrl+Space"))?;
+            let show_i =
+                MenuItem::with_id(app, "show", "Open davidcast", true, Some("Ctrl+Space"))?;
             let prefs_i = MenuItem::with_id(app, "prefs", "Preferences…", true, Some("Cmd+,"))?;
             let sep_i = tauri::menu::PredefinedMenuItem::separator(app)?;
             let quit_i = MenuItem::with_id(app, "quit", "Quit davidcast", true, Some("Cmd+Q"))?;
             let menu = Menu::with_items(app, &[&show_i, &prefs_i, &sep_i, &quit_i])?;
 
-            let tray_icon = tauri::image::Image::from_bytes(include_bytes!(
-                "../icons/tray.png"
-            ))?;
+            let tray_icon = tauri::image::Image::from_bytes(include_bytes!("../icons/tray.png"))?;
             let _tray = TrayIconBuilder::with_id("main-tray")
                 .icon(tray_icon)
                 .icon_as_template(true)
@@ -356,6 +357,7 @@ pub fn run() {
             commands::list_themes,
             commands::get_active_theme,
             commands::set_active_theme,
+            commands::toggle_light_dark_cmd,
             commands::import_theme,
             commands::themes_dir,
             commands::list_workspaces,

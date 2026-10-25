@@ -142,10 +142,7 @@ pub fn search(mut opts: FileSearchOpts) -> Vec<FileEntry> {
         }
     }
 
-    let mut entries: Vec<FileEntry> = hits
-        .into_iter()
-        .filter_map(|p| decorate(&p))
-        .collect();
+    let mut entries: Vec<FileEntry> = hits.into_iter().filter_map(|p| decorate(&p)).collect();
 
     if opts.sort_by_mtime {
         entries.sort_by(|a, b| b.modified_at.cmp(&a.modified_at));
@@ -156,7 +153,14 @@ pub fn search(mut opts: FileSearchOpts) -> Vec<FileEntry> {
 
 fn run_fd(pattern: &str, root: &str, extensions: &[String]) -> Option<String> {
     let mut cmd = std::process::Command::new("fd");
-    cmd.args(["--type", "f", "--max-depth", "8", "--hidden", "--no-ignore-vcs"]);
+    cmd.args([
+        "--type",
+        "f",
+        "--max-depth",
+        "8",
+        "--hidden",
+        "--no-ignore-vcs",
+    ]);
     for ex in EXCLUDES {
         cmd.args(["--exclude", ex]);
     }

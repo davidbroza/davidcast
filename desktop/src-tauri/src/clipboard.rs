@@ -51,12 +51,16 @@ fn load_from_disk() -> Option<Vec<ClipboardEntry>> {
 }
 
 fn save_to_disk(entries: &[ClipboardEntry]) {
-    let Some(path) = store_path() else { return; };
+    let Some(path) = store_path() else {
+        return;
+    };
     if let Some(parent) = path.parent() {
         let _ = std::fs::create_dir_all(parent);
     }
     let tmp = path.with_extension("json.tmp");
-    let Ok(bytes) = serde_json::to_vec_pretty(entries) else { return; };
+    let Ok(bytes) = serde_json::to_vec_pretty(entries) else {
+        return;
+    };
     if std::fs::write(&tmp, &bytes).is_ok() {
         let _ = std::fs::rename(&tmp, &path);
     }
@@ -131,7 +135,9 @@ pub fn start_watcher(app: AppHandle) {
     let _ = state().lock();
     std::thread::spawn(move || loop {
         std::thread::sleep(Duration::from_millis(POLL_MS));
-        let Ok(text) = app.clipboard().read_text() else { continue; };
+        let Ok(text) = app.clipboard().read_text() else {
+            continue;
+        };
         record(text);
     });
 }
